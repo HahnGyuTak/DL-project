@@ -159,7 +159,10 @@ button.small {
 #inputCanvas,
 #resultImg,
 #inputImg,
-#vqaImagePreview {
+#vqaImagePreview,
+#segResultImg,
+#maskPreviewImg,
+#inpaintResultImg {
   width: 100%;
   min-height: 300px;
   border: 1px dashed #bac5d4;
@@ -169,7 +172,10 @@ button.small {
 
 #resultImg,
 #inputImg,
-#vqaImagePreview {
+#vqaImagePreview,
+#segResultImg,
+#maskPreviewImg,
+#inpaintResultImg {
   object-fit: contain;
 }
 
@@ -267,6 +273,16 @@ button.small {
   padding: 10px 12px;
   font-size: 14px;
   color: #1d2a3f;
+}
+
+.inpaint-prompt {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
 }
 
 @media (max-width: 980px) {

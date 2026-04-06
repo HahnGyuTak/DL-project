@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Model Dock - Segmentation</title>
-    <meta name="description" content="Model Dock from-scratch demos" />
+    <title>Model Dock - Segmentation + SD3 Inpaint</title>
+    <meta name="description" content="Segmentation + Stable Diffusion 3 inpainting demo" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -13,16 +13,14 @@
   <body>
     <main class="wrap">
       <nav class="topnav">
-        <a class="active" href="./index.html">EfficientSAM Segmentation</a>
+        <a href="./index.html">EfficientSAM Segmentation</a>
         <a href="./detection.html">Grounding DINO Detection</a>
         <a href="./vqa.html">LLaVA VQA</a>
-        <a href="./seg_inpaint.html">Seg + SD3 Inpaint</a>
+        <a class="active" href="./seg_inpaint.html">Seg + SD3 Inpaint</a>
       </nav>
 
       <header class="hero">
-        <!-- <p class="eyebrow">FROM SCRATCH DEMO</p> -->
-        <h1>EfficientSAM Segmentation</h1>
-        <!-- <p class="desc">상단 탭으로 데모를 전환할 수 있고, 이 프로젝트 API로 직접 추론합니다.</p> -->
+        <h1>Segmentation + SD3 Inpaint</h1>
       </header>
 
       <section class="panel controls">
@@ -62,7 +60,7 @@
           <input id="imageInput" type="file" accept="image/*" />
           <button id="undoBtn" class="ghost">Undo</button>
           <button id="clearBtn" class="ghost">Clear</button>
-          <button id="runBtn">Run Segmentation</button>
+          <button id="runSegBtn">Run Segmentation</button>
         </div>
 
         <p id="status" class="status"></p>
@@ -74,17 +72,65 @@
           <canvas id="inputCanvas"></canvas>
         </div>
         <div class="col">
-          <h2>Result Overlay</h2>
-          <img id="resultImg" alt="segmentation result" />
+          <h2>Segmentation Overlay</h2>
+          <img id="segResultImg" alt="segmentation result" />
+        </div>
+      </section>
+
+      <section class="panel stage">
+        <div class="col">
+          <h2>Auto Mask</h2>
+          <img id="maskPreviewImg" alt="generated mask" />
+        </div>
+        <div class="col">
+          <h2>Segmented Crop</h2>
+          <div id="segCropGrid" class="crop-grid"></div>
+        </div>
+      </section>
+
+      <section class="panel controls">
+        <div class="row">
+          <label>
+            Edit Prompt
+            <textarea id="editPrompt" class="inpaint-prompt" placeholder="예: turn the selected object into a red ceramic vase"></textarea>
+          </label>
+          <label>
+            Negative Prompt
+            <textarea id="negativePrompt" class="inpaint-prompt" placeholder="예: blurry, low quality, artifacts"></textarea>
+          </label>
+          <label>
+            Max Side
+            <input id="maxSideInput" type="number" value="1024" min="512" max="1536" step="64" />
+          </label>
+        </div>
+
+        <div class="row">
+          <label>
+            Steps
+            <input id="stepsInput" type="number" value="30" min="5" max="80" step="1" />
+          </label>
+          <label>
+            Guidance
+            <input id="guidanceInput" type="number" value="7.0" min="1" max="15" step="0.5" />
+          </label>
+          <label>
+            Seed (-1 random)
+            <input id="seedInput" type="number" value="-1" step="1" />
+          </label>
+        </div>
+
+        <div class="row action-row">
+          <div></div>
+          <button id="runInpaintBtn">Run SD3 Inpaint</button>
         </div>
       </section>
 
       <section class="panel">
-        <h2>Segmented Crops</h2>
-        <div id="segCropGrid" class="crop-grid"></div>
+        <h2>Inpaint Result</h2>
+        <img id="inpaintResultImg" alt="sd3 inpaint output" />
       </section>
     </main>
 
-    <script src="./app.js"></script>
+    <script src="./seg_inpaint.js"></script>
   </body>
 </html>

@@ -7,3 +7,5 @@ torch
 torchvision
 huggingface_hub
 transformers
+diffusers==0.31.0
+accelerate

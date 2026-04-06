@@ -16,6 +16,7 @@ from torchvision.transforms import ToTensor
 REPO_ID = "merve/EfficientSAM"
 GROUNDING_DINO_MODEL_ID = "IDEA-Research/grounding-dino-tiny"
 LLAVA_MODEL_ID = "llava-hf/llava-1.5-7b-hf"
+SD3_INPAINT_MODEL_ID = "IrohXu/stable-diffusion-3-inpainting"
 
 _MODEL = None
 _DEVICE = None
@@ -32,6 +33,11 @@ _LLAVA_PROCESSOR = None
 _LLAVA_DEVICE = None
 _LLAVA_DTYPE = None
 _LLAVA_LOCK = threading.Lock()
+
+_SD3_INPAINT_PIPE = None
+_SD3_INPAINT_DEVICE = None
+_SD3_INPAINT_DTYPE = None
+_SD3_INPAINT_LOCK = threading.Lock()
 
 
 def get_model() -> tuple[Any, torch.device, str]:
@@ -105,6 +111,34 @@ def get_llava_model() -> tuple[Any, Any, torch.device, torch.dtype]:
         _LLAVA_DEVICE = device
         _LLAVA_DTYPE = dtype
         return _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
+
+
+def get_sd3_inpaint_pipeline() -> tuple[Any, torch.device, torch.dtype]:
+    global _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
+    with _SD3_INPAINT_LOCK:
+        if _SD3_INPAINT_PIPE is not None:
+            return _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
+
+        try:
+            from diffusers import StableDiffusion3InpaintPipeline
+        except Exception as e:
+            raise RuntimeError(f"diffusers import failed: {e}") from e
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        dtype = torch.float16 if device.type == "cuda" else torch.float32
+
+        pipe = StableDiffusion3InpaintPipeline.from_pretrained(
+            SD3_INPAINT_MODEL_ID,
+            torch_dtype=dtype,
+        )
+        pipe = pipe.to(device)
+        if hasattr(pipe, "enable_attention_slicing"):
+            pipe.enable_attention_slicing()
+
+        _SD3_INPAINT_PIPE = pipe
+        _SD3_INPAINT_DEVICE = device
+        _SD3_INPAINT_DTYPE = dtype
+        return _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
 
 
 def resize_longest_side(image: Image.Image, target: int = 1024) -> tuple[Image.Image, float]:
@@ -243,6 +277,65 @@ def make_detection_overlay(image: Image.Image, detections: list[dict[str, Any]])
     return out
 
 
+def _resize_for_inpaint(
+    image: Image.Image,
+    mask: Image.Image,
+    max_side: int = 1024,
+) -> tuple[Image.Image, Image.Image, tuple[int, int]]:
+    ow, oh = image.size
+    target = max(256, int(max_side))
+    scale = min(1.0, target / max(ow, oh))
+    nw = max(64, int(round((ow * scale) / 64.0)) * 64)
+    nh = max(64, int(round((oh * scale) / 64.0)) * 64)
+    if nw == ow and nh == oh:
+        return image, mask, (ow, oh)
+    img_r = image.resize((nw, nh), resample=Image.LANCZOS)
+    mask_r = mask.resize((nw, nh), resample=Image.NEAREST)
+    return img_r, mask_r, (ow, oh)
+
+
+@torch.no_grad()
+def run_sd3_inpaint(
+    image: Image.Image,
+    mask: Image.Image,
+    prompt: str,
+    negative_prompt: str = "",
+    num_inference_steps: int = 30,
+    guidance_scale: float = 7.0,
+    seed: int = -1,
+    max_side: int = 1024,
+) -> dict[str, Any]:
+    pipe, device, dtype = get_sd3_inpaint_pipeline()
+    image = image.convert("RGB")
+    mask = mask.convert("L").point(lambda p: 255 if p > 127 else 0)
+
+    image_r, mask_r, original_size = _resize_for_inpaint(image, mask, max_side=max_side)
+
+    generator = None
+    if int(seed) >= 0:
+        generator = torch.Generator(device=device.type).manual_seed(int(seed))
+
+    result = pipe(
+        prompt=prompt,
+        negative_prompt=negative_prompt if negative_prompt.strip() else None,
+        image=image_r,
+        mask_image=mask_r,
+        num_inference_steps=max(1, int(num_inference_steps)),
+        guidance_scale=float(guidance_scale),
+        generator=generator,
+    ).images[0]
+
+    if result.size != original_size:
+        result = result.resize(original_size, resample=Image.LANCZOS)
+
+    return {
+        "image": result,
+        "device": str(device),
+        "dtype": str(dtype).replace("torch.", ""),
+        "model_id": SD3_INPAINT_MODEL_ID,
+    }
+
+
 @torch.no_grad()
 def run_llava_vqa(
     image: Image.Image,
@@ -339,6 +432,20 @@ def health_vqa() -> dict[str, Any]:
     return {
         "ok": True,
         "model": LLAVA_MODEL_ID,
+        "loaded": loaded,
+        "device": device,
+    }
+
+
+@app.get("/health/inpaint")
+def health_inpaint() -> dict[str, Any]:
+    loaded = _SD3_INPAINT_PIPE is not None
+    device = str(_SD3_INPAINT_DEVICE) if loaded and _SD3_INPAINT_DEVICE is not None else str(
+        torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    return {
+        "ok": True,
+        "model": SD3_INPAINT_MODEL_ID,
         "loaded": loaded,
         "device": device,
     }
@@ -485,4 +592,61 @@ async def vqa_llava(
         "dtype": result["dtype"],
         "max_new_tokens": int(max_new_tokens),
         "temperature": float(temperature),
+    }
+
+
+@app.post("/inpaint/sd3")
+async def inpaint_sd3(
+    image: UploadFile = File(...),
+    mask: UploadFile = File(...),
+    prompt: str = Form(...),
+    negative_prompt: str = Form(""),
+    num_inference_steps: int = Form(30),
+    guidance_scale: float = Form(7.0),
+    seed: int = Form(-1),
+    max_side: int = Form(1024),
+) -> dict[str, Any]:
+    if not prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt is required")
+
+    image_content = await image.read()
+    if not image_content:
+        raise HTTPException(status_code=400, detail="Image file is empty")
+
+    mask_content = await mask.read()
+    if not mask_content:
+        raise HTTPException(status_code=400, detail="Mask file is empty")
+
+    try:
+        image_pil = Image.open(io.BytesIO(image_content)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to decode image: {e}") from e
+
+    try:
+        mask_pil = Image.open(io.BytesIO(mask_content)).convert("L")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to decode mask: {e}") from e
+
+    try:
+        result = run_sd3_inpaint(
+            image=image_pil,
+            mask=mask_pil,
+            prompt=prompt.strip(),
+            negative_prompt=negative_prompt,
+            num_inference_steps=int(num_inference_steps),
+            guidance_scale=float(guidance_scale),
+            seed=int(seed),
+            max_side=int(max_side),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SD3 inpaint failed: {e}") from e
+
+    return {
+        "output_png_b64": encode_png(result["image"]),
+        "model_id": result["model_id"],
+        "device": result["device"],
+        "dtype": result["dtype"],
+        "num_inference_steps": int(num_inference_steps),
+        "guidance_scale": float(guidance_scale),
+        "seed": int(seed),
     }

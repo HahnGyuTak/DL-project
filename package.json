@@ -1,0 +1,9 @@
+{
+  "name": "model-dock",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "npx wrangler pages dev web",
+    "deploy": "npx wrangler pages deploy web --project-name model-dock"
+  }
+}

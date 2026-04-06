@@ -1,3 +1,4 @@
+import os
 import threading
 from typing import Any
 
@@ -289,4 +290,13 @@ with gr.Blocks(title="EfficientSAM Web Demo") as demo:
 
 
 if __name__ == "__main__":
-    demo.queue(default_concurrency_limit=2).launch(server_name="0.0.0.0")
+    server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
+    server_port_env = os.getenv("GRADIO_SERVER_PORT")
+    server_port = int(server_port_env) if server_port_env else None
+    share = os.getenv("GRADIO_SHARE", "0") == "1"
+
+    demo.queue(default_concurrency_limit=2).launch(
+        server_name=server_name,
+        server_port=server_port,
+        share=share,
+    )

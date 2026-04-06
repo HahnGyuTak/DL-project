@@ -1,6 +1,7 @@
 const API_KEY = "efficientsam_api_url_v1";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
 const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
+const DEFAULT_ASPECT_RATIO = "2 / 1";
 
 const els = {
   apiUrl: document.getElementById("apiUrl"),
@@ -28,6 +29,14 @@ function setStatus(msg) {
 
 function setEmptyImage(imgEl) {
   imgEl.src = EMPTY_IMAGE_DATA_URL;
+}
+
+function setImageBoxAspect(imgEl, width, height) {
+  if (width > 0 && height > 0) {
+    imgEl.style.aspectRatio = `${width} / ${height}`;
+    return;
+  }
+  imgEl.style.aspectRatio = DEFAULT_ASPECT_RATIO;
 }
 
 function looksLikeIpv4(host) {
@@ -172,8 +181,25 @@ els.imageInput.addEventListener("change", () => {
   const file = els.imageInput.files?.[0];
   if (!file) return;
   state.imageFile = file;
-  const url = URL.createObjectURL(file);
-  els.inputImg.src = url;
+  const inputUrl = URL.createObjectURL(file);
+  const probeUrl = URL.createObjectURL(file);
+  els.inputImg.src = inputUrl;
+  els.inputImg.onload = () => URL.revokeObjectURL(inputUrl);
+  els.inputImg.onerror = () => URL.revokeObjectURL(inputUrl);
+
+  const probe = new Image();
+  probe.onload = () => {
+    setImageBoxAspect(els.inputImg, probe.width, probe.height);
+    setImageBoxAspect(els.resultImg, probe.width, probe.height);
+    URL.revokeObjectURL(probeUrl);
+  };
+  probe.onerror = () => {
+    setImageBoxAspect(els.inputImg, 0, 0);
+    setImageBoxAspect(els.resultImg, 0, 0);
+    URL.revokeObjectURL(probeUrl);
+  };
+  probe.src = probeUrl;
+
   setEmptyImage(els.resultImg);
   els.detList.textContent = "";
   clearCrops();
@@ -254,6 +280,8 @@ els.runBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
+  setImageBoxAspect(els.inputImg, 0, 0);
+  setImageBoxAspect(els.resultImg, 0, 0);
   setEmptyImage(els.inputImg);
   setEmptyImage(els.resultImg);
   clearCrops();

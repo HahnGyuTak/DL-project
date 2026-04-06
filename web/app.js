@@ -1,6 +1,7 @@
 const API_KEY = "efficientsam_api_url_v1";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
 const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
+const DEFAULT_ASPECT_RATIO = "2 / 1";
 
 const els = {
   apiUrl: document.getElementById("apiUrl"),
@@ -35,6 +36,14 @@ function setStatus(msg) {
 
 function setEmptyImage(imgEl) {
   imgEl.src = EMPTY_IMAGE_DATA_URL;
+}
+
+function setImageBoxAspect(imgEl, width, height) {
+  if (width > 0 && height > 0) {
+    imgEl.style.aspectRatio = `${width} / ${height}`;
+    return;
+  }
+  imgEl.style.aspectRatio = DEFAULT_ASPECT_RATIO;
 }
 
 function looksLikeIpv4(host) {
@@ -292,6 +301,7 @@ els.imageInput.addEventListener("change", () => {
     state.imageFile = file;
     state.imageObj = img;
     clearPrompts();
+    setImageBoxAspect(els.resultImg, img.width, img.height);
     setEmptyImage(els.resultImg);
     clearSegmentCrops();
     drawCanvas();
@@ -402,6 +412,7 @@ els.runBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
+  setImageBoxAspect(els.resultImg, 0, 0);
   setEmptyImage(els.resultImg);
   clearSegmentCrops();
   setStatus("이미지를 업로드하고 프롬프트를 클릭하세요.");

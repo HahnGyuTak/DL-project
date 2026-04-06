@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Model Dock - Segmentation</title>
-    <meta name="description" content="Model Dock from-scratch demos" />
+    <title>Model Dock - Detection</title>
+    <meta name="description" content="Grounding DINO open-vocabulary detection demo" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -13,14 +13,14 @@
   <body>
     <main class="wrap">
       <nav class="topnav">
-        <a class="active" href="./index.html">EfficientSAM Segmentation</a>
-        <a href="./detection.html">Grounding DINO Detection</a>
+        <a href="./index.html">EfficientSAM Segmentation</a>
+        <a class="active" href="./detection.html">Grounding DINO Detection</a>
       </nav>
 
       <header class="hero">
-        <p class="eyebrow">FROM SCRATCH DEMO</p>
-        <h1>EfficientSAM Segmentation</h1>
-        <p class="desc">상단 탭으로 데모를 전환할 수 있고, 이 프로젝트 API로 직접 추론합니다.</p>
+        <p class="eyebrow">FROM NOTEBOOK TASK</p>
+        <h1>Open-vocabulary Detection</h1>
+        <p class="desc">`grounding_dino_open_vocab_detection.ipynb`의 텍스트 프롬프트 검출 task를 웹으로 옮겼습니다.</p>
       </header>
 
       <section class="panel controls">
@@ -35,32 +35,22 @@
 
         <div class="row">
           <label>
-            Prompt Mode
-            <select id="modeSelect">
-              <option value="point">point</option>
-              <option value="box">box</option>
-            </select>
+            Labels (comma separated)
+            <input id="labelsInput" type="text" value="cat, remote control, sofa, lamp" />
           </label>
-
           <label>
-            Point Label
-            <select id="labelSelect">
-              <option value="1">foreground</option>
-              <option value="0">background</option>
-            </select>
+            Box Threshold
+            <input id="thresholdInput" type="number" value="0.35" min="0" max="1" step="0.01" />
           </label>
-
           <label>
-            Input Size
-            <input id="inputSize" type="number" value="1024" min="512" max="1536" step="64" />
+            Text Threshold
+            <input id="textThresholdInput" type="number" value="0.25" min="0" max="1" step="0.01" />
           </label>
         </div>
 
         <div class="row action-row">
           <input id="imageInput" type="file" accept="image/*" />
-          <button id="undoBtn" class="ghost">Undo</button>
-          <button id="clearBtn" class="ghost">Clear</button>
-          <button id="runBtn">Run Segmentation</button>
+          <button id="runBtn">Run Detection</button>
         </div>
 
         <p id="status" class="status"></p>
@@ -68,16 +58,21 @@
 
       <section class="panel stage">
         <div class="col">
-          <h2>Input + Prompts</h2>
-          <canvas id="inputCanvas"></canvas>
+          <h2>Input Image</h2>
+          <img id="inputImg" alt="input image" />
         </div>
         <div class="col">
-          <h2>Result Overlay</h2>
-          <img id="resultImg" alt="segmentation result" />
+          <h2>Detection Overlay</h2>
+          <img id="resultImg" alt="detection result" />
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>Detections</h2>
+        <pre id="detList" class="det-list"></pre>
       </section>
     </main>
 
-    <script src="./app.js"></script>
+    <script src="./detect.js"></script>
   </body>
 </html>

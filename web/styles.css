@@ -25,6 +25,29 @@ body {
   padding: 22px 16px 34px;
 }
 
+.topnav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.topnav a {
+  text-decoration: none;
+  color: #214055;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: 700 13px "Space Grotesk", sans-serif;
+}
+
+.topnav a.active {
+  color: #fff;
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
 .hero {
   margin-bottom: 14px;
 }
@@ -134,7 +157,8 @@ button.small {
 }
 
 canvas,
-#resultImg {
+#resultImg,
+#inputImg {
   width: 100%;
   min-height: 300px;
   border: 1px dashed #bac5d4;
@@ -142,8 +166,16 @@ canvas,
   background: #fafdff;
 }
 
-#resultImg {
+#resultImg,
+#inputImg {
   object-fit: contain;
+}
+
+.det-list {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  color: #2a3b52;
 }
 
 @media (max-width: 980px) {

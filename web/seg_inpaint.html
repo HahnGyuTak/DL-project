@@ -72,19 +72,13 @@
           <canvas id="inputCanvas"></canvas>
         </div>
         <div class="col">
-          <h2>Segmentation Overlay</h2>
-          <img id="segResultImg" alt="segmentation result" />
-        </div>
-      </section>
-
-      <section class="panel stage">
-        <div class="col">
-          <h2>Auto Mask</h2>
-          <img id="maskPreviewImg" alt="generated mask" />
-        </div>
-        <div class="col">
-          <h2>Segmented Crop</h2>
-          <div id="segCropGrid" class="crop-grid"></div>
+          <h2>Segmentation View</h2>
+          <div class="view-switch">
+            <button id="viewOverlayBtn" class="ghost active">Segmentation Overlay</button>
+            <button id="viewMaskBtn" class="ghost">Auto Mask</button>
+            <button id="viewCutoutBtn" class="ghost">Segmented Crop</button>
+          </div>
+          <img id="segViewImg" alt="segmentation view output" />
         </div>
       </section>
 

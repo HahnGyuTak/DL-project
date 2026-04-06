@@ -49,6 +49,7 @@ python -m http.server 8080 -d web
 - LLaVA VQA 탭: 이미지 업로드 + 질문 입력 + Ask LLaVA
 - Seg + SD3 Inpaint 탭: 세그멘테이션 -> 자동 마스크 -> 편집 프롬프트 인페인팅
   - `Mask Expand(px)`로 마스크 경계를 바깥으로 확장 가능 (기본 12px)
+  - Segmentation View에서 `Overlay / Auto Mask / Segmented Crop` 클릭 전환
 
 ## 3) Cloudflare Pages 배포
 

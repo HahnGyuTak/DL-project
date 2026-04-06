@@ -14,9 +14,10 @@ const els = {
   runSegBtn: document.getElementById("runSegBtn"),
   status: document.getElementById("status"),
   inputCanvas: document.getElementById("inputCanvas"),
-  segResultImg: document.getElementById("segResultImg"),
-  maskPreviewImg: document.getElementById("maskPreviewImg"),
-  segCropGrid: document.getElementById("segCropGrid"),
+  viewOverlayBtn: document.getElementById("viewOverlayBtn"),
+  viewMaskBtn: document.getElementById("viewMaskBtn"),
+  viewCutoutBtn: document.getElementById("viewCutoutBtn"),
+  segViewImg: document.getElementById("segViewImg"),
   editPrompt: document.getElementById("editPrompt"),
   negativePrompt: document.getElementById("negativePrompt"),
   maxSideInput: document.getElementById("maxSideInput"),
@@ -35,6 +36,12 @@ const state = {
   labels: [],
   boxPoints: [],
   maskPngB64: "",
+  currentView: "overlay",
+  viewImages: {
+    overlay: "",
+    mask: "",
+    cutout: "",
+  },
 };
 
 const ctx = els.inputCanvas.getContext("2d");
@@ -135,10 +142,11 @@ function clearPrompts() {
 
 function clearDerivedOutputs() {
   state.maskPngB64 = "";
-  els.segResultImg.removeAttribute("src");
-  els.maskPreviewImg.removeAttribute("src");
+  state.viewImages.overlay = "";
+  state.viewImages.mask = "";
+  state.viewImages.cutout = "";
+  els.segViewImg.removeAttribute("src");
   els.inpaintResultImg.removeAttribute("src");
-  clearSegmentCrops();
 }
 
 function toCanvasCoords(evt) {
@@ -150,18 +158,6 @@ function toCanvasCoords(evt) {
   return [x, y];
 }
 
-function clearSegmentCrops() {
-  els.segCropGrid.innerHTML = "";
-}
-
-function showSegmentCropEmpty(msg) {
-  clearSegmentCrops();
-  const p = document.createElement("p");
-  p.className = "crop-empty";
-  p.textContent = msg;
-  els.segCropGrid.appendChild(p);
-}
-
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -171,49 +167,38 @@ function loadImage(url) {
   });
 }
 
-function computeMaskBBox(maskData, w, h, threshold = 127) {
-  let minX = w;
-  let minY = h;
-  let maxX = -1;
-  let maxY = -1;
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const v = maskData[i];
-      if (v > threshold) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-
-  if (maxX < minX || maxY < minY) return null;
-  return {
-    x: minX,
-    y: minY,
-    w: maxX - minX + 1,
-    h: maxY - minY + 1,
+function setActiveView(view) {
+  state.currentView = view;
+  const map = {
+    overlay: els.viewOverlayBtn,
+    mask: els.viewMaskBtn,
+    cutout: els.viewCutoutBtn,
   };
+  Object.values(map).forEach((btn) => btn.classList.remove("active"));
+  if (map[view]) map[view].classList.add("active");
 }
 
-async function renderSegmentCrop(maskPngB64) {
-  if (!state.imageObj) {
-    showSegmentCropEmpty("원본 이미지를 먼저 업로드하세요.");
+function renderSegView() {
+  const src = state.viewImages[state.currentView] || "";
+  if (!src) {
+    els.segViewImg.removeAttribute("src");
     return;
   }
+  els.segViewImg.src = src;
+}
 
-  if (!maskPngB64) {
-    showSegmentCropEmpty("마스크 결과가 없습니다.");
-    return;
-  }
-
+async function buildFullSizeCutout(maskPngB64) {
+  if (!state.imageObj || !maskPngB64) return "";
   const src = state.imageObj;
   const w = src.width;
   const h = src.height;
   const maskImg = await loadImage(`data:image/png;base64,${maskPngB64}`);
+
+  const srcCanvas = document.createElement("canvas");
+  srcCanvas.width = w;
+  srcCanvas.height = h;
+  const srcCtx = srcCanvas.getContext("2d");
+  srcCtx.drawImage(src, 0, 0, w, h);
 
   const maskCanvas = document.createElement("canvas");
   maskCanvas.width = w;
@@ -221,46 +206,31 @@ async function renderSegmentCrop(maskPngB64) {
   const maskCtx = maskCanvas.getContext("2d");
   maskCtx.drawImage(maskImg, 0, 0, w, h);
 
-  const maskData = maskCtx.getImageData(0, 0, w, h).data;
-  const box = computeMaskBBox(maskData, w, h, 127);
-  if (!box) {
-    showSegmentCropEmpty("세그멘테이션 영역을 찾지 못했습니다.");
-    return;
-  }
-
-  const objectCanvas = document.createElement("canvas");
-  objectCanvas.width = box.w;
-  objectCanvas.height = box.h;
-  const objCtx = objectCanvas.getContext("2d");
-  objCtx.drawImage(src, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
-
-  const srcImageData = objCtx.getImageData(0, 0, box.w, box.h);
+  const srcImageData = srcCtx.getImageData(0, 0, w, h);
   const srcPx = srcImageData.data;
-  const maskPx = maskCtx.getImageData(box.x, box.y, box.w, box.h).data;
-  for (let i = 0; i < box.w * box.h; i++) {
-    srcPx[i * 4 + 3] = maskPx[i * 4];
-  }
-  objCtx.putImageData(srcImageData, 0, 0);
+  const maskPx = maskCtx.getImageData(0, 0, w, h).data;
 
   const outCanvas = document.createElement("canvas");
-  const maxSide = 220;
-  const scale = Math.min(1, maxSide / Math.max(box.w, box.h));
-  outCanvas.width = Math.max(1, Math.round(box.w * scale));
-  outCanvas.height = Math.max(1, Math.round(box.h * scale));
+  outCanvas.width = w;
+  outCanvas.height = h;
   const outCtx = outCanvas.getContext("2d");
   outCtx.fillStyle = "#ffffff";
-  outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
-  outCtx.drawImage(objectCanvas, 0, 0, outCanvas.width, outCanvas.height);
+  outCtx.fillRect(0, 0, w, h);
+  const outData = outCtx.getImageData(0, 0, w, h);
+  const outPx = outData.data;
 
-  clearSegmentCrops();
-  const card = document.createElement("article");
-  card.className = "crop-card";
-  const meta = document.createElement("p");
-  meta.className = "crop-meta";
-  meta.textContent = "1. segmented object";
-  card.appendChild(meta);
-  card.appendChild(outCanvas);
-  els.segCropGrid.appendChild(card);
+  for (let i = 0; i < w * h; i++) {
+    const m = maskPx[i * 4];
+    if (m > 127) {
+      outPx[i * 4] = srcPx[i * 4];
+      outPx[i * 4 + 1] = srcPx[i * 4 + 1];
+      outPx[i * 4 + 2] = srcPx[i * 4 + 2];
+      outPx[i * 4 + 3] = 255;
+    }
+  }
+
+  outCtx.putImageData(outData, 0, 0);
+  return outCanvas.toDataURL("image/png");
 }
 
 function b64ToFile(base64, filename, mimeType = "image/png") {
@@ -329,6 +299,21 @@ els.saveApiBtn.addEventListener("click", () => {
   saveApiBase();
 });
 
+els.viewOverlayBtn.addEventListener("click", () => {
+  setActiveView("overlay");
+  renderSegView();
+});
+
+els.viewMaskBtn.addEventListener("click", () => {
+  setActiveView("mask");
+  renderSegView();
+});
+
+els.viewCutoutBtn.addEventListener("click", () => {
+  setActiveView("cutout");
+  renderSegView();
+});
+
 els.healthBtn.addEventListener("click", async () => {
   const base = getApiBase();
   try {
@@ -388,10 +373,12 @@ els.runSegBtn.addEventListener("click", async () => {
 
     const data = await res.json();
     state.maskPngB64 = data.mask_png_b64 || "";
-    els.segResultImg.src = `data:image/png;base64,${data.overlay_png_b64}`;
-    els.maskPreviewImg.src = `data:image/png;base64,${data.mask_png_b64}`;
+    state.viewImages.overlay = `data:image/png;base64,${data.overlay_png_b64}`;
+    state.viewImages.mask = `data:image/png;base64,${data.mask_png_b64}`;
+    state.viewImages.cutout = await buildFullSizeCutout(state.maskPngB64);
+    setActiveView("overlay");
+    renderSegView();
     els.inpaintResultImg.removeAttribute("src");
-    await renderSegmentCrop(state.maskPngB64);
 
     setStatus(
       `세그멘테이션 완료 | device=${data.device} | checkpoint=${data.checkpoint} | best_idx=${data.best_idx}`
@@ -457,6 +444,7 @@ els.runInpaintBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
-  clearSegmentCrops();
+  setActiveView("overlay");
+  renderSegView();
   setStatus("이미지를 업로드하고 세그멘테이션 후, 프롬프트로 SD3 인페인팅을 실행하세요.");
 })();

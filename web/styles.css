@@ -162,7 +162,8 @@ button.small {
 #vqaImagePreview,
 #segResultImg,
 #maskPreviewImg,
-#inpaintResultImg {
+#inpaintResultImg,
+#segViewImg {
   width: 100%;
   min-height: 300px;
   border: 1px dashed #bac5d4;
@@ -175,8 +176,22 @@ button.small {
 #vqaImagePreview,
 #segResultImg,
 #maskPreviewImg,
-#inpaintResultImg {
+#inpaintResultImg,
+#segViewImg {
   object-fit: contain;
+}
+
+.view-switch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.view-switch button.active {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
 }
 
 .det-list {

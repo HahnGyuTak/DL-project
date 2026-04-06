@@ -23,6 +23,7 @@ const els = {
   stepsInput: document.getElementById("stepsInput"),
   guidanceInput: document.getElementById("guidanceInput"),
   seedInput: document.getElementById("seedInput"),
+  maskExpandInput: document.getElementById("maskExpandInput"),
   runInpaintBtn: document.getElementById("runInpaintBtn"),
   inpaintResultImg: document.getElementById("inpaintResultImg"),
 };
@@ -429,6 +430,7 @@ els.runInpaintBtn.addEventListener("click", async () => {
   fd.append("num_inference_steps", String(parseInt(els.stepsInput.value || "30", 10)));
   fd.append("guidance_scale", String(parseFloat(els.guidanceInput.value || "7.0")));
   fd.append("seed", String(parseInt(els.seedInput.value || "-1", 10)));
+  fd.append("mask_expand_px", String(parseInt(els.maskExpandInput.value || "12", 10)));
   fd.append("max_side", String(parseInt(els.maxSideInput.value || "1024", 10)));
 
   setStatus("SD3 인페인팅 실행 중... (첫 요청은 모델 로딩으로 오래 걸릴 수 있음)");

@@ -11,7 +11,7 @@ import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import hf_hub_download
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, LlavaForConditionalGeneration
 from torchvision import transforms
 from torchvision.transforms import ToTensor
@@ -367,10 +367,19 @@ def run_sd3_inpaint(
     seed: int = -1,
     max_side: int = 1024,
     strength: float = 0.6,
+    mask_expand_px: int = 12,
 ) -> dict[str, Any]:
     pipe, device, dtype = get_sd3_inpaint_pipeline()
     image = image.convert("RGB")
     mask = mask.convert("L").point(lambda p: 255 if p > 127 else 0)
+
+    # Expand mask area a bit so inpainting also covers boundary/context around the object.
+    if int(mask_expand_px) > 0:
+        k = int(mask_expand_px) * 2 + 1
+        if k % 2 == 0:
+            k += 1
+        k = max(3, min(k, 255))
+        mask = mask.filter(ImageFilter.MaxFilter(size=k))
 
     if max(image.size) > int(max_side):
         image, mask, _ = _resize_for_inpaint(image, mask, max_side=max_side)
@@ -679,6 +688,7 @@ async def inpaint_sd3(
     num_inference_steps: int = Form(30),
     guidance_scale: float = Form(7.0),
     strength: float = Form(0.6),
+    mask_expand_px: int = Form(12),
     seed: int = Form(-1),
     max_side: int = Form(1024),
 ) -> dict[str, Any]:
@@ -712,6 +722,7 @@ async def inpaint_sd3(
             num_inference_steps=int(num_inference_steps),
             guidance_scale=float(guidance_scale),
             strength=float(strength),
+            mask_expand_px=int(mask_expand_px),
             seed=int(seed),
             max_side=int(max_side),
         )
@@ -727,5 +738,6 @@ async def inpaint_sd3(
         "num_inference_steps": int(num_inference_steps),
         "guidance_scale": float(guidance_scale),
         "strength": float(strength),
+        "mask_expand_px": int(mask_expand_px),
         "seed": int(seed),
     }

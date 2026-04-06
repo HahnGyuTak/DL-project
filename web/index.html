@@ -4,41 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EfficientSAM Demo</title>
-    <meta name="description" content="현재 프로젝트의 EfficientSAM 로직을 웹에서 실행하는 단일 데모 페이지" />
+    <meta name="description" content="EfficientSAM 세그멘테이션 데모 웹페이지" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="wrap">
       <header class="hero">
-        <p class="eyebrow">CURRENT PROJECT LOGIC ONLY</p>
-        <h1>EfficientSAM Segmentation Demo</h1>
+        <p class="eyebrow">DEMO PAGE</p>
+        <h1>EfficientSAM Segmentation</h1>
         <p class="desc">
-          이 페이지는 현재 디렉토리의 <code>app.py</code> 로직(이미지 업로드 + 포인트/박스 프롬프트 세그멘테이션)을
-          단일 데모로 연결합니다.
+          이미지 업로드 후 포인트/박스 프롬프트로 세그멘테이션을 실행하는
+          <strong>단일 데모 페이지</strong>입니다.
         </p>
       </header>
 
-      <section class="panel">
-        <h2>Backend URL</h2>
-        <p class="hint">배포된 Gradio 앱 URL을 입력하세요. (예: HF Space URL)</p>
-        <div class="url-row">
-          <input id="demoUrl" type="url" placeholder="https://your-gradio-app-url" />
-          <button id="saveBtn">저장</button>
-          <button id="resetBtn" class="ghost">기본값</button>
-        </div>
-        <p id="status" class="status"></p>
+      <section class="panel quick-guide">
+        <h2>사용 방법</h2>
+        <ol>
+          <li>아래 데모 화면에서 이미지 업로드</li>
+          <li>Point 또는 Box 모드 선택</li>
+          <li>이미지 클릭으로 프롬프트 입력 후 <code>Run Segmentation</code></li>
+        </ol>
       </section>
 
       <section class="panel viewer-panel">
         <div class="viewer-head">
           <h2>Live Demo</h2>
-          <a id="openNewTab" href="#" target="_blank" rel="noreferrer">새 탭으로 열기</a>
+          <div class="viewer-actions">
+            <a id="openNewTab" href="#" target="_blank" rel="noreferrer">새 탭으로 열기</a>
+            <button id="reloadBtn" type="button" class="ghost small">새로고침</button>
+          </div>
         </div>
+
         <div id="viewer" class="viewer"></div>
+        <p id="status" class="status"></p>
       </section>
+
+      <details class="panel advanced">
+        <summary>고급 설정 (백엔드 URL 변경)</summary>
+        <p class="hint">
+          기본값은 공개 EfficientSAM 데모 URL입니다. 본인 백엔드(Gradio/HF Space)가 있으면 바꿔서 사용할 수 있습니다.
+        </p>
+        <div class="url-row">
+          <input id="demoUrl" type="url" placeholder="https://your-gradio-app-url" />
+          <button id="saveBtn" type="button">적용</button>
+          <button id="resetBtn" type="button" class="ghost">기본값</button>
+        </div>
+      </details>
     </main>
 
     <script src="./app.js"></script>

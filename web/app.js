@@ -4,6 +4,7 @@ const DEFAULT_URL = "https://yunyangx-efficientsam.hf.space";
 const demoUrlInput = document.getElementById("demoUrl");
 const saveBtn = document.getElementById("saveBtn");
 const resetBtn = document.getElementById("resetBtn");
+const reloadBtn = document.getElementById("reloadBtn");
 const statusEl = document.getElementById("status");
 const viewerEl = document.getElementById("viewer");
 const openNewTabEl = document.getElementById("openNewTab");
@@ -22,23 +23,24 @@ function setSavedUrl(url) {
   localStorage.setItem(STORAGE_KEY, url);
 }
 
-function renderViewer(url) {
-  if (!url) {
-    viewerEl.innerHTML = `<div class="empty">백엔드 URL을 입력하면 데모가 표시됩니다.</div>`;
-    openNewTabEl.href = "#";
-    return;
-  }
-
-  viewerEl.innerHTML = `<iframe src="${url}" title="EfficientSAM Demo" loading="lazy" referrerpolicy="no-referrer"></iframe>`;
-  openNewTabEl.href = url;
-}
-
 function setStatus(msg) {
   statusEl.textContent = msg;
 }
 
+function renderViewer(url) {
+  if (!url) {
+    viewerEl.innerHTML = `<div class="empty">백엔드 URL이 비어 있습니다. 고급 설정에서 URL을 입력하세요.</div>`;
+    openNewTabEl.href = "#";
+    return;
+  }
+
+  viewerEl.innerHTML = `<iframe src="${url}" title="EfficientSAM Demo" loading="eager" referrerpolicy="no-referrer"></iframe>`;
+  openNewTabEl.href = url;
+}
+
 function applyUrl(raw, persist = true) {
   const url = normalizeUrl(raw);
+
   if (!url) {
     setStatus("URL이 비어 있습니다.");
     return;
@@ -54,7 +56,7 @@ function applyUrl(raw, persist = true) {
   if (persist) setSavedUrl(url);
   demoUrlInput.value = url;
   renderViewer(url);
-  setStatus(`현재 연결 URL: ${url}`);
+  setStatus(`연결된 데모 URL: ${url}`);
 }
 
 saveBtn.addEventListener("click", () => {
@@ -63,6 +65,10 @@ saveBtn.addEventListener("click", () => {
 
 resetBtn.addEventListener("click", () => {
   applyUrl(DEFAULT_URL, true);
+});
+
+reloadBtn.addEventListener("click", () => {
+  applyUrl(demoUrlInput.value || getSavedUrl(), false);
 });
 
 demoUrlInput.addEventListener("keydown", (e) => {

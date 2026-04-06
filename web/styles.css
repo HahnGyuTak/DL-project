@@ -5,6 +5,9 @@
   --muted: #5e6c84;
   --line: #d8dfeb;
   --brand: #0b5d76;
+  --switch-active-bg: #dceff6;
+  --switch-active-border: #8fb4c4;
+  --switch-active-text: #1d4253;
 }
 
 * { box-sizing: border-box; }
@@ -190,9 +193,9 @@ button.small {
 }
 
 .view-switch button.active {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
+  background: var(--switch-active-bg);
+  color: var(--switch-active-text);
+  border-color: var(--switch-active-border);
 }
 
 .det-list {

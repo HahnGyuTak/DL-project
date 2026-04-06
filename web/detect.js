@@ -14,6 +14,7 @@ const els = {
   inputImg: document.getElementById("inputImg"),
   resultImg: document.getElementById("resultImg"),
   detList: document.getElementById("detList"),
+  cropGrid: document.getElementById("cropGrid"),
 };
 
 const state = {
@@ -78,6 +79,90 @@ function setDetectionList(detections) {
   els.detList.textContent = rows.join("\n");
 }
 
+function clearCrops() {
+  els.cropGrid.innerHTML = "";
+}
+
+function clipBox(box, imgW, imgH) {
+  const x0 = Math.min(box[0], box[2]);
+  const y0 = Math.min(box[1], box[3]);
+  const x1 = Math.max(box[0], box[2]);
+  const y1 = Math.max(box[1], box[3]);
+
+  let sx = Math.max(0, Math.floor(x0));
+  let sy = Math.max(0, Math.floor(y0));
+  let ex = Math.min(imgW, Math.ceil(x1));
+  let ey = Math.min(imgH, Math.ceil(y1));
+
+  if (ex <= sx) ex = Math.min(imgW, sx + 1);
+  if (ey <= sy) ey = Math.min(imgH, sy + 1);
+
+  const sw = Math.max(1, ex - sx);
+  const sh = Math.max(1, ey - sy);
+  return { sx, sy, sw, sh };
+}
+
+async function ensureInputImageLoaded() {
+  if (els.inputImg.complete && els.inputImg.naturalWidth > 0) return;
+  await new Promise((resolve, reject) => {
+    const onLoad = () => {
+      els.inputImg.removeEventListener("load", onLoad);
+      els.inputImg.removeEventListener("error", onError);
+      resolve();
+    };
+    const onError = () => {
+      els.inputImg.removeEventListener("load", onLoad);
+      els.inputImg.removeEventListener("error", onError);
+      reject(new Error("input image load failed"));
+    };
+    els.inputImg.addEventListener("load", onLoad, { once: true });
+    els.inputImg.addEventListener("error", onError, { once: true });
+  });
+}
+
+async function renderCrops(detections) {
+  clearCrops();
+  if (!detections || detections.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "crop-empty";
+    empty.textContent = "검출된 객체가 없습니다.";
+    els.cropGrid.appendChild(empty);
+    return;
+  }
+
+  await ensureInputImageLoaded();
+  const imgW = els.inputImg.naturalWidth;
+  const imgH = els.inputImg.naturalHeight;
+
+  detections.forEach((det, idx) => {
+    const { sx, sy, sw, sh } = clipBox(det.box_xyxy, imgW, imgH);
+    const card = document.createElement("article");
+    card.className = "crop-card";
+
+    const meta = document.createElement("p");
+    meta.className = "crop-meta";
+    meta.textContent = `${idx + 1}. ${det.label} (${det.score.toFixed(3)})`;
+    card.appendChild(meta);
+
+    const canvas = document.createElement("canvas");
+    const maxSide = 220;
+    const scale = Math.min(1, maxSide / Math.max(sw, sh));
+    canvas.width = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(els.inputImg, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    card.appendChild(canvas);
+
+    const boxInfo = document.createElement("p");
+    boxInfo.className = "crop-box";
+    boxInfo.textContent = `box: [${sx}, ${sy}, ${sx + sw}, ${sy + sh}]`;
+    card.appendChild(boxInfo);
+
+    els.cropGrid.appendChild(card);
+  });
+}
+
 els.imageInput.addEventListener("change", () => {
   const file = els.imageInput.files?.[0];
   if (!file) return;
@@ -86,6 +171,7 @@ els.imageInput.addEventListener("change", () => {
   els.inputImg.src = url;
   els.resultImg.removeAttribute("src");
   els.detList.textContent = "";
+  clearCrops();
   setStatus(`이미지 로드됨: ${file.name}`);
 });
 
@@ -144,10 +230,12 @@ els.runBtn.addEventListener("click", async () => {
     const data = await res.json();
     els.resultImg.src = `data:image/png;base64,${data.overlay_png_b64}`;
     setDetectionList(data.detections);
+    await renderCrops(data.detections);
     setStatus(
       `완료 | model=${data.model_id} | device=${data.device} | detections=${data.num_detections} | prompt="${data.text_prompt}"`
     );
   } catch (e) {
+    clearCrops();
     if (e instanceof TypeError) {
       setStatus(
         "실패: 네트워크 연결 오류입니다. API URL, 포트 오픈, CORS/HTTPS 설정을 확인하세요."
@@ -161,5 +249,6 @@ els.runBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
+  clearCrops();
   setStatus("이미지를 업로드하고 labels를 입력한 뒤 Run Detection을 누르세요.");
 })();

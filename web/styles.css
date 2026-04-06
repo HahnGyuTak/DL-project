@@ -178,6 +178,47 @@ canvas,
   color: #2a3b52;
 }
 
+.crop-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.crop-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+}
+
+.crop-card canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid #e4ebf4;
+  background: #fafdff;
+}
+
+.crop-meta {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #243953;
+}
+
+.crop-box {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #6a7a90;
+}
+
+.crop-empty {
+  margin: 0;
+  color: #5e6c84;
+  font-size: 13px;
+}
+
 @media (max-width: 980px) {
   h1 { font-size: 34px; }
 

@@ -10,11 +10,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw
-from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
+from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, LlavaForConditionalGeneration
 from torchvision.transforms import ToTensor
 
 REPO_ID = "merve/EfficientSAM"
 GROUNDING_DINO_MODEL_ID = "IDEA-Research/grounding-dino-tiny"
+LLAVA_MODEL_ID = "llava-hf/llava-1.5-7b-hf"
 
 _MODEL = None
 _DEVICE = None
@@ -25,6 +26,12 @@ _DINO_MODEL = None
 _DINO_PROCESSOR = None
 _DINO_DEVICE = None
 _DINO_LOCK = threading.Lock()
+
+_LLAVA_MODEL = None
+_LLAVA_PROCESSOR = None
+_LLAVA_DEVICE = None
+_LLAVA_DTYPE = None
+_LLAVA_LOCK = threading.Lock()
 
 
 def get_model() -> tuple[Any, torch.device, str]:
@@ -74,6 +81,30 @@ def get_grounding_dino_model() -> tuple[Any, Any, torch.device]:
         _DINO_PROCESSOR = processor
         _DINO_DEVICE = device
         return _DINO_MODEL, _DINO_PROCESSOR, _DINO_DEVICE
+
+
+def get_llava_model() -> tuple[Any, Any, torch.device, torch.dtype]:
+    global _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
+    with _LLAVA_LOCK:
+        if _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None:
+            return _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        dtype = torch.float16 if device.type == "cuda" else torch.float32
+
+        processor = AutoProcessor.from_pretrained(LLAVA_MODEL_ID)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            LLAVA_MODEL_ID,
+            torch_dtype=dtype,
+            attn_implementation="eager",
+        ).to(device)
+        model.eval()
+
+        _LLAVA_MODEL = model
+        _LLAVA_PROCESSOR = processor
+        _LLAVA_DEVICE = device
+        _LLAVA_DTYPE = dtype
+        return _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
 
 
 def resize_longest_side(image: Image.Image, target: int = 1024) -> tuple[Image.Image, float]:
@@ -212,6 +243,61 @@ def make_detection_overlay(image: Image.Image, detections: list[dict[str, Any]])
     return out
 
 
+@torch.no_grad()
+def run_llava_vqa(
+    image: Image.Image,
+    question: str,
+    max_new_tokens: int = 128,
+    temperature: float = 0.2,
+) -> dict[str, Any]:
+    model, processor, device, dtype = get_llava_model()
+    prompt = f"USER: <image>\n{question.strip()}\nASSISTANT:"
+
+    inputs = processor(images=image, text=prompt, return_tensors="pt")
+    model_inputs: dict[str, Any] = {}
+    for k, v in inputs.items():
+        if torch.is_tensor(v):
+            if k == "pixel_values":
+                model_inputs[k] = v.to(device=device, dtype=dtype)
+            else:
+                model_inputs[k] = v.to(device=device)
+        else:
+            model_inputs[k] = v
+
+    do_sample = temperature > 0
+    generation_kwargs: dict[str, Any] = {
+        "max_new_tokens": max(1, int(max_new_tokens)),
+        "do_sample": do_sample,
+    }
+    if do_sample:
+        generation_kwargs["temperature"] = max(temperature, 1e-4)
+
+    generation = model.generate(
+        **model_inputs,
+        **generation_kwargs,
+    )
+
+    prompt_len = model_inputs["input_ids"].shape[1]
+    answer_tokens = generation[:, prompt_len:]
+    if answer_tokens.shape[1] == 0:
+        decoded = processor.batch_decode(generation, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        answer = decoded.replace(prompt, "").strip()
+    else:
+        answer = processor.batch_decode(
+            answer_tokens,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )[0].strip()
+
+    return {
+        "answer": answer,
+        "device": str(device),
+        "dtype": str(dtype).replace("torch.", ""),
+        "model_id": LLAVA_MODEL_ID,
+        "prompt": prompt,
+    }
+
+
 app = FastAPI(title="EfficientSAM API", version="1.0.0")
 
 app.add_middleware(
@@ -241,6 +327,20 @@ def health_detector() -> dict[str, Any]:
         "ok": True,
         "model": GROUNDING_DINO_MODEL_ID,
         "device": str(device),
+    }
+
+
+@app.get("/health/vqa")
+def health_vqa() -> dict[str, Any]:
+    loaded = _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None
+    device = str(_LLAVA_DEVICE) if loaded and _LLAVA_DEVICE is not None else str(
+        torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    )
+    return {
+        "ok": True,
+        "model": LLAVA_MODEL_ID,
+        "loaded": loaded,
+        "device": device,
     }
 
 
@@ -345,4 +445,44 @@ async def detect_open_vocab(
         "model_id": result["model_id"],
         "threshold": float(threshold),
         "text_threshold": float(text_threshold),
+    }
+
+
+@app.post("/vqa/llava")
+async def vqa_llava(
+    image: UploadFile = File(...),
+    question: str = Form(...),
+    max_new_tokens: int = Form(128),
+    temperature: float = Form(0.2),
+) -> dict[str, Any]:
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="question is required")
+
+    content = await image.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Image file is empty")
+
+    try:
+        pil = Image.open(io.BytesIO(content)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to decode image: {e}") from e
+
+    try:
+        result = run_llava_vqa(
+            image=pil,
+            question=question,
+            max_new_tokens=int(max_new_tokens),
+            temperature=float(temperature),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLaVA inference failed: {e}") from e
+
+    return {
+        "answer": result["answer"],
+        "question": question.strip(),
+        "model_id": result["model_id"],
+        "device": result["device"],
+        "dtype": result["dtype"],
+        "max_new_tokens": int(max_new_tokens),
+        "temperature": float(temperature),
     }

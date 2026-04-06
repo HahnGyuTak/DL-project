@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Dock - LLaVA VQA</title>
+    <meta name="description" content="LLaVA image question answering demo" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <nav class="topnav">
+        <a href="./index.html">EfficientSAM Segmentation</a>
+        <a href="./detection.html">Grounding DINO Detection</a>
+        <a class="active" href="./vqa.html">LLaVA VQA</a>
+      </nav>
+
+      <header class="hero">
+        <h1>LLaVA VQA</h1>
+      </header>
+
+      <section class="panel controls">
+        <div class="row api-row">
+          <label>
+            API URL
+            <input id="apiUrl" type="url" placeholder="https://your-api-server" />
+          </label>
+          <button id="saveApiBtn" class="small">저장</button>
+          <button id="healthBtn" class="ghost small">헬스체크</button>
+        </div>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section class="panel vqa-grid">
+        <div class="vqa-col">
+          <h2>Image Upload</h2>
+          <input id="imageInput" type="file" accept="image/*" />
+          <img id="vqaImagePreview" alt="vqa input image" />
+        </div>
+
+        <div class="vqa-col">
+          <h2>Question</h2>
+          <textarea id="questionInput" class="vqa-question" placeholder="예: 이 이미지에서 사람이 무엇을 하고 있나요?"></textarea>
+          <div class="vqa-row">
+            <label>
+              Max New Tokens
+              <input id="maxTokensInput" type="number" min="16" max="512" step="1" value="128" />
+            </label>
+            <label>
+              Temperature
+              <input id="temperatureInput" type="number" min="0" max="1" step="0.1" value="0.2" />
+            </label>
+          </div>
+          <button id="askBtn">Ask LLaVA</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>LLaVA Answer</h2>
+        <pre id="answerBox" class="answer-box"></pre>
+      </section>
+    </main>
+
+    <script src="./vqa.js"></script>
+  </body>
+</html>

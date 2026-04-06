@@ -158,7 +158,8 @@ button.small {
 
 #inputCanvas,
 #resultImg,
-#inputImg {
+#inputImg,
+#vqaImagePreview {
   width: 100%;
   min-height: 300px;
   border: 1px dashed #bac5d4;
@@ -167,7 +168,8 @@ button.small {
 }
 
 #resultImg,
-#inputImg {
+#inputImg,
+#vqaImagePreview {
   object-fit: contain;
 }
 
@@ -221,10 +223,61 @@ button.small {
   font-size: 13px;
 }
 
+.vqa-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.vqa-col h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.vqa-col input[type="file"] {
+  margin-bottom: 8px;
+}
+
+.vqa-question {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  margin-bottom: 10px;
+}
+
+.vqa-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.answer-box {
+  margin: 0;
+  min-height: 80px;
+  white-space: pre-wrap;
+  background: #f7fbff;
+  border: 1px solid #d8e3f1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #1d2a3f;
+}
+
 @media (max-width: 980px) {
   h1 { font-size: 34px; }
 
   .stage {
+    grid-template-columns: 1fr;
+  }
+
+  .vqa-grid,
+  .vqa-row {
     grid-template-columns: 1fr;
   }
 

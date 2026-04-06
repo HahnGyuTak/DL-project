@@ -156,7 +156,7 @@ button.small {
   font-family: "Space Grotesk", sans-serif;
 }
 
-canvas,
+#inputCanvas,
 #resultImg,
 #inputImg {
   width: 100%;
@@ -195,9 +195,11 @@ canvas,
 .crop-card canvas {
   width: 100%;
   height: auto;
+  min-height: 0;
   border-radius: 8px;
   border: 1px solid #e4ebf4;
   background: #fafdff;
+  display: block;
 }
 
 .crop-meta {

@@ -69,6 +69,7 @@
       <section class="panel stage">
         <div class="col">
           <h2>Input + Prompts</h2>
+          <div class="canvas-align-gap" aria-hidden="true"></div>
           <canvas id="inputCanvas"></canvas>
         </div>
         <div class="col">
@@ -83,44 +84,43 @@
       </section>
 
       <section class="panel controls">
-        <div class="row">
+        <div class="inpaint-main-row">
           <label>
             Edit Prompt
-            <textarea id="editPrompt" class="inpaint-prompt" placeholder="예: turn the selected object into a red ceramic vase"></textarea>
+            <input id="editPrompt" type="text" class="inpaint-line" placeholder="예: turn the selected object into a red ceramic vase" />
           </label>
           <label>
             Negative Prompt
-            <textarea id="negativePrompt" class="inpaint-prompt" placeholder="예: blurry, low quality, artifacts"></textarea>
+            <input id="negativePrompt" type="text" class="inpaint-line" placeholder="예: blurry, low quality, artifacts" />
           </label>
-          <label>
-            Max Side
-            <input id="maxSideInput" type="number" value="1024" min="512" max="1536" step="64" />
-          </label>
-        </div>
-
-        <div class="row">
-          <label>
-            Steps
-            <input id="stepsInput" type="number" value="30" min="5" max="80" step="1" />
-          </label>
-          <label>
-            Guidance
-            <input id="guidanceInput" type="number" value="7.0" min="1" max="15" step="0.5" />
-          </label>
-          <label>
-            Seed (-1 random)
-            <input id="seedInput" type="number" value="-1" step="1" />
-          </label>
-          <label>
-            Mask Expand(px)
-            <input id="maskExpandInput" type="number" value="12" min="0" max="64" step="1" />
-          </label>
-        </div>
-
-        <div class="row action-row">
-          <div></div>
           <button id="runInpaintBtn">Run SD3 Inpaint</button>
         </div>
+
+        <details class="advanced-toggle">
+          <summary>&gt; Advanced Options</summary>
+          <div class="advanced-grid">
+            <label>
+              Max Side
+              <input id="maxSideInput" type="number" value="1024" min="512" max="1536" step="64" />
+            </label>
+            <label>
+              Steps
+              <input id="stepsInput" type="number" value="30" min="5" max="80" step="1" />
+            </label>
+            <label>
+              Guidance
+              <input id="guidanceInput" type="number" value="7.0" min="1" max="15" step="0.5" />
+            </label>
+            <label>
+              Seed (-1 random)
+              <input id="seedInput" type="number" value="-1" step="1" />
+            </label>
+            <label>
+              Mask Expand(px)
+              <input id="maskExpandInput" type="number" value="12" min="0" max="64" step="1" />
+            </label>
+          </div>
+        </details>
       </section>
 
       <section class="panel">

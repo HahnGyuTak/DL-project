@@ -113,8 +113,8 @@ els.askBtn.addEventListener("click", async () => {
     return;
   }
 
-  const maxNewTokens = parseInt(els.maxTokensInput.value || "128", 10);
-  const temperature = parseFloat(els.temperatureInput.value || "0.2");
+  const maxNewTokens = parseInt(els.maxTokensInput?.value || "128", 10);
+  const temperature = parseFloat(els.temperatureInput?.value || "0.2");
 
   const fd = new FormData();
   fd.append("image", state.imageFile);

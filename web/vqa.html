@@ -42,10 +42,13 @@
           <img id="vqaImagePreview" alt="vqa input image" src="data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=" />
         </div>
 
-        <div class="vqa-col">
+        <div class="vqa-col vqa-col-right">
           <h2>Question</h2>
-          <textarea id="questionInput" class="vqa-question" placeholder="예: 이 이미지에서 사람이 무엇을 하고 있나요?"></textarea>
-          <div class="vqa-row">
+          <div class="vqa-ask-row">
+            <input id="questionInput" type="text" class="vqa-question-inline" placeholder="예: 이 이미지에서 사람이 무엇을 하고 있나요?" />
+            <button id="askBtn">Ask LLaVA</button>
+          </div>
+          <div class="vqa-hidden-controls">
             <label>
               Max New Tokens
               <input id="maxTokensInput" type="number" min="16" max="512" step="1" value="128" />
@@ -55,13 +58,9 @@
               <input id="temperatureInput" type="number" min="0" max="1" step="0.1" value="0.2" />
             </label>
           </div>
-          <button id="askBtn">Ask LLaVA</button>
+          <h2>LLaVA Answer</h2>
+          <pre id="answerBox" class="answer-box"></pre>
         </div>
-      </section>
-
-      <section class="panel">
-        <h2>LLaVA Answer</h2>
-        <pre id="answerBox" class="answer-box"></pre>
       </section>
     </main>
 

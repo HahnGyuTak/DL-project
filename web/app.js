@@ -1,6 +1,6 @@
 const API_KEY = "efficientsam_api_url_v1";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
-const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
 
 const els = {
   apiUrl: document.getElementById("apiUrl"),

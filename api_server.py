@@ -688,7 +688,7 @@ async def inpaint_sd3(
     num_inference_steps: int = Form(30),
     guidance_scale: float = Form(7.0),
     strength: float = Form(0.6),
-    mask_expand_px: int = Form(12),
+    mask_expand_px: int = Form(30),
     seed: int = Form(-1),
     max_side: int = Form(1024),
 ) -> dict[str, Any]:

@@ -15,6 +15,7 @@ const els = {
   status: document.getElementById("status"),
   inputCanvas: document.getElementById("inputCanvas"),
   resultImg: document.getElementById("resultImg"),
+  segCropGrid: document.getElementById("segCropGrid"),
 };
 
 const state = {
@@ -117,6 +118,122 @@ function drawCanvas() {
   }
 }
 
+function clearSegmentCrops() {
+  els.segCropGrid.innerHTML = "";
+}
+
+function showSegmentCropEmpty(msg) {
+  clearSegmentCrops();
+  const p = document.createElement("p");
+  p.className = "crop-empty";
+  p.textContent = msg;
+  els.segCropGrid.appendChild(p);
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = url;
+  });
+}
+
+function computeMaskBBox(maskData, w, h, threshold = 127) {
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const v = maskData[i];
+      if (v > threshold) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return null;
+  return {
+    x: minX,
+    y: minY,
+    w: maxX - minX + 1,
+    h: maxY - minY + 1,
+  };
+}
+
+async function renderSegmentCrop(maskPngB64) {
+  if (!state.imageObj) {
+    showSegmentCropEmpty("원본 이미지를 먼저 업로드하세요.");
+    return;
+  }
+
+  if (!maskPngB64) {
+    showSegmentCropEmpty("마스크 결과가 없습니다.");
+    return;
+  }
+
+  const src = state.imageObj;
+  const w = src.width;
+  const h = src.height;
+  const maskImg = await loadImage(`data:image/png;base64,${maskPngB64}`);
+
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = w;
+  maskCanvas.height = h;
+  const maskCtx = maskCanvas.getContext("2d");
+  maskCtx.drawImage(maskImg, 0, 0, w, h);
+
+  const maskData = maskCtx.getImageData(0, 0, w, h).data;
+  const box = computeMaskBBox(maskData, w, h, 127);
+  if (!box) {
+    showSegmentCropEmpty("세그멘테이션 영역을 찾지 못했습니다.");
+    return;
+  }
+
+  const objectCanvas = document.createElement("canvas");
+  objectCanvas.width = box.w;
+  objectCanvas.height = box.h;
+  const objCtx = objectCanvas.getContext("2d");
+  objCtx.drawImage(src, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+  objCtx.globalCompositeOperation = "destination-in";
+  objCtx.drawImage(maskCanvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+  objCtx.globalCompositeOperation = "source-over";
+
+  const outCanvas = document.createElement("canvas");
+  const maxSide = 220;
+  const scale = Math.min(1, maxSide / Math.max(box.w, box.h));
+  outCanvas.width = Math.max(1, Math.round(box.w * scale));
+  outCanvas.height = Math.max(1, Math.round(box.h * scale));
+  const outCtx = outCanvas.getContext("2d");
+  outCtx.fillStyle = "#ffffff";
+  outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+  outCtx.drawImage(objectCanvas, 0, 0, outCanvas.width, outCanvas.height);
+
+  clearSegmentCrops();
+  const card = document.createElement("article");
+  card.className = "crop-card";
+
+  const meta = document.createElement("p");
+  meta.className = "crop-meta";
+  meta.textContent = "1. segmented object";
+  card.appendChild(meta);
+
+  card.appendChild(outCanvas);
+
+  const boxInfo = document.createElement("p");
+  boxInfo.className = "crop-box";
+  boxInfo.textContent = `box: [${box.x}, ${box.y}, ${box.x + box.w}, ${box.y + box.h}]`;
+  card.appendChild(boxInfo);
+
+  els.segCropGrid.appendChild(card);
+}
+
 function clearPrompts() {
   state.points = [];
   state.labels = [];
@@ -163,6 +280,7 @@ els.imageInput.addEventListener("change", () => {
     state.imageObj = img;
     clearPrompts();
     els.resultImg.removeAttribute("src");
+    clearSegmentCrops();
     drawCanvas();
     setStatus(`이미지 로드됨: ${file.name} (${img.width}x${img.height})`);
   };
@@ -252,10 +370,12 @@ els.runBtn.addEventListener("click", async () => {
 
     const data = await res.json();
     els.resultImg.src = `data:image/png;base64,${data.overlay_png_b64}`;
+    await renderSegmentCrop(data.mask_png_b64);
     setStatus(
       `완료 | device=${data.device} | checkpoint=${data.checkpoint} | best_idx=${data.best_idx} | ious=${JSON.stringify(data.ious)}`
     );
   } catch (e) {
+    clearSegmentCrops();
     if (e instanceof TypeError) {
       setStatus(
         "실패: 네트워크 연결 오류입니다. API URL, 포트 오픈, CORS/HTTPS 설정을 확인하세요."
@@ -269,5 +389,6 @@ els.runBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
+  clearSegmentCrops();
   setStatus("이미지를 업로드하고 프롬프트를 클릭하세요.");
 })();

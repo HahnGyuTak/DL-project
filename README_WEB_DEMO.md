@@ -9,6 +9,8 @@
   - `/detect/open-vocab`: Grounding DINO open-vocabulary detection
   - `/vqa/llava`: LLaVA 1.5 7B 기반 VQA
   - `/inpaint/sd3`: Stable Diffusion 3 inpainting
+    - 커스텀 파이프라인: `IrohXu/stable-diffusion-3-inpainting`
+    - 베이스 모델: `stabilityai/stable-diffusion-3-medium-diffusers`
 - `web/`: 정적 데모 프론트엔드 (Cloudflare Pages 배포 대상)
   - `index.html`: Segmentation 페이지
   - `detection.html`: Detection 페이지

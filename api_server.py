@@ -1,4 +1,5 @@
 import base64
+import importlib.util
 import io
 import json
 import threading
@@ -17,6 +18,7 @@ REPO_ID = "merve/EfficientSAM"
 GROUNDING_DINO_MODEL_ID = "IDEA-Research/grounding-dino-tiny"
 LLAVA_MODEL_ID = "llava-hf/llava-1.5-7b-hf"
 SD3_INPAINT_MODEL_ID = "IrohXu/stable-diffusion-3-inpainting"
+SD3_BASE_MODEL_ID = "stabilityai/stable-diffusion-3-medium-diffusers"
 
 _MODEL = None
 _DEVICE = None
@@ -120,15 +122,32 @@ def get_sd3_inpaint_pipeline() -> tuple[Any, torch.device, torch.dtype]:
             return _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
 
         try:
-            from diffusers import StableDiffusion3InpaintPipeline
+            from diffusers import DiffusionPipeline
         except Exception as e:
             raise RuntimeError(f"diffusers import failed: {e}") from e
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         dtype = torch.float16 if device.type == "cuda" else torch.float32
 
-        pipe = StableDiffusion3InpaintPipeline.from_pretrained(
-            SD3_INPAINT_MODEL_ID,
+        # IrohXu repo provides custom pipeline code, not a full diffusers model repo.
+        # Load custom pipeline class from that repo, then attach it to SD3 base weights.
+        pipeline_file = hf_hub_download(
+            repo_id=SD3_INPAINT_MODEL_ID,
+            filename="pipeline_stable_diffusion_3_inpaint.py",
+        )
+        spec = importlib.util.spec_from_file_location("custom_sd3_inpaint_pipeline", pipeline_file)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("Failed to create module spec for custom SD3 inpaint pipeline")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        pipeline_cls = getattr(mod, "StableDiffusion3InpaintPipeline", None)
+        if pipeline_cls is None:
+            raise RuntimeError("StableDiffusion3InpaintPipeline class not found in custom pipeline file")
+        if not issubclass(pipeline_cls, DiffusionPipeline):
+            raise RuntimeError("Custom SD3 inpaint pipeline class is not a DiffusionPipeline")
+
+        pipe = pipeline_cls.from_pretrained(
+            SD3_BASE_MODEL_ID,
             torch_dtype=dtype,
         )
         pipe = pipe.to(device)
@@ -446,6 +465,7 @@ def health_inpaint() -> dict[str, Any]:
     return {
         "ok": True,
         "model": SD3_INPAINT_MODEL_ID,
+        "base_model": SD3_BASE_MODEL_ID,
         "loaded": loaded,
         "device": device,
     }
@@ -644,6 +664,7 @@ async def inpaint_sd3(
     return {
         "output_png_b64": encode_png(result["image"]),
         "model_id": result["model_id"],
+        "base_model_id": SD3_BASE_MODEL_ID,
         "device": result["device"],
         "dtype": result["dtype"],
         "num_inference_steps": int(num_inference_steps),

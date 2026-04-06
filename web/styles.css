@@ -249,11 +249,13 @@ button.small {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  align-items: stretch;
 }
 
 .vqa-col {
   display: flex;
   flex-direction: column;
+  min-height: 100%;
 }
 
 .vqa-col h2 {
@@ -304,6 +306,10 @@ button.small {
   padding: 10px 12px;
   font-size: 14px;
   color: #1d2a3f;
+}
+
+.vqa-col-right .answer-box {
+  flex: 1;
 }
 
 .inpaint-prompt {
@@ -399,5 +405,9 @@ button.small {
   .inpaint-main-row,
   .advanced-grid {
     grid-template-columns: 1fr;
+  }
+
+  .vqa-col-right .answer-box {
+    flex: none;
   }
 }

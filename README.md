@@ -34,11 +34,22 @@ cd DL-project
 
 ## 3. Python 환경 준비
 
-가상환경 사용을 권장합니다.
+가상환경 사용을 권장합니다. 아래 2가지 중 하나를 선택하세요.
+
+### 3.1 `venv` 사용
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements_api.txt
+```
+
+### 3.2 `conda` 사용
+
+```bash
+conda create -n dl-project python=3.10 -y
+conda activate dl-project
 pip install --upgrade pip
 pip install -r requirements_api.txt
 ```

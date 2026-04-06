@@ -201,9 +201,17 @@ async function renderSegmentCrop(maskPngB64) {
   objectCanvas.height = box.h;
   const objCtx = objectCanvas.getContext("2d");
   objCtx.drawImage(src, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
-  objCtx.globalCompositeOperation = "destination-in";
-  objCtx.drawImage(maskCanvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
-  objCtx.globalCompositeOperation = "source-over";
+
+  // Canvas compositing uses source alpha, so grayscale mask colors alone do not cut out.
+  // Apply mask luminance directly to alpha channel for true cutout.
+  const srcImageData = objCtx.getImageData(0, 0, box.w, box.h);
+  const srcPx = srcImageData.data;
+  const maskPx = maskCtx.getImageData(box.x, box.y, box.w, box.h).data;
+  for (let i = 0; i < box.w * box.h; i++) {
+    const maskVal = maskPx[i * 4]; // 0..255
+    srcPx[i * 4 + 3] = maskVal; // alpha
+  }
+  objCtx.putImageData(srcImageData, 0, 0);
 
   const outCanvas = document.createElement("canvas");
   const maxSide = 220;

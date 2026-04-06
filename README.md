@@ -1,6 +1,5 @@
-# DL-project: From-Scratch Vision Demo Suite
+# DL-project: AI Web Demo
 
-이 저장소는 Hugging Face 데모 iframe 없이, 로컬 백엔드 + 정적 웹으로 아래 기능을 제공합니다.
 
 - EfficientSAM 세그멘테이션
 - Grounding DINO Open-vocabulary Detection
@@ -11,10 +10,8 @@
 
 ## 1. 요구사항
 
-- OS: Linux 권장 (Ubuntu 계열)
-- Python 3.10+
-- `pip`
-- (선택) NVIDIA GPU + CUDA 환경
+- Python 3.10+ , `pip`
+- NVIDIA GPU + CUDA 환경
 - (선택) Cloudflare Pages 배포 시 `node`, `npm`, `wrangler`
 
 참고:

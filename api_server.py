@@ -2,6 +2,7 @@ import base64
 import importlib.util
 import io
 import json
+import tempfile
 import threading
 from typing import Any
 
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, LlavaForConditionalGeneration
+from torchvision import transforms
 from torchvision.transforms import ToTensor
 
 REPO_ID = "merve/EfficientSAM"
@@ -42,13 +44,31 @@ _SD3_INPAINT_DTYPE = None
 _SD3_INPAINT_LOCK = threading.Lock()
 
 
+def pick_best_device() -> torch.device:
+    if not torch.cuda.is_available():
+        return torch.device("cpu")
+
+    best_idx = 0
+    best_free = -1
+    count = torch.cuda.device_count()
+    for idx in range(count):
+        try:
+            free_bytes, _ = torch.cuda.mem_get_info(idx)
+        except Exception:
+            free_bytes = 0
+        if free_bytes > best_free:
+            best_free = free_bytes
+            best_idx = idx
+    return torch.device(f"cuda:{best_idx}")
+
+
 def get_model() -> tuple[Any, torch.device, str]:
     global _MODEL, _DEVICE, _CHECKPOINT
     with _LOCK:
         if _MODEL is not None:
             return _MODEL, _DEVICE, _CHECKPOINT
 
-        preferred = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        preferred = pick_best_device()
         device = preferred
         model = None
         checkpoint = ""
@@ -56,7 +76,7 @@ def get_model() -> tuple[Any, torch.device, str]:
         if preferred.type == "cuda":
             try:
                 gpu_ckpt = hf_hub_download(repo_id=REPO_ID, filename="efficient_sam_s_gpu.jit")
-                model = torch.jit.load(gpu_ckpt, map_location="cuda")
+                model = torch.jit.load(gpu_ckpt, map_location=str(device))
                 checkpoint = "efficient_sam_s_gpu.jit"
             except Exception:
                 device = torch.device("cpu")
@@ -80,7 +100,7 @@ def get_grounding_dino_model() -> tuple[Any, Any, torch.device]:
         if _DINO_MODEL is not None and _DINO_PROCESSOR is not None:
             return _DINO_MODEL, _DINO_PROCESSOR, _DINO_DEVICE
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = pick_best_device()
         processor = AutoProcessor.from_pretrained(GROUNDING_DINO_MODEL_ID)
         model = AutoModelForZeroShotObjectDetection.from_pretrained(GROUNDING_DINO_MODEL_ID).to(device)
         model.eval()
@@ -97,7 +117,7 @@ def get_llava_model() -> tuple[Any, Any, torch.device, torch.dtype]:
         if _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None:
             return _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = pick_best_device()
         dtype = torch.float16 if device.type == "cuda" else torch.float32
 
         processor = AutoProcessor.from_pretrained(LLAVA_MODEL_ID)
@@ -126,7 +146,7 @@ def get_sd3_inpaint_pipeline() -> tuple[Any, torch.device, torch.dtype]:
         except Exception as e:
             raise RuntimeError(f"diffusers import failed: {e}") from e
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = pick_best_device()
         dtype = torch.float16 if device.type == "cuda" else torch.float32
 
         # IrohXu repo provides custom pipeline code, not a full diffusers model repo.
@@ -135,7 +155,19 @@ def get_sd3_inpaint_pipeline() -> tuple[Any, torch.device, torch.dtype]:
             repo_id=SD3_INPAINT_MODEL_ID,
             filename="pipeline_stable_diffusion_3_inpaint.py",
         )
-        spec = importlib.util.spec_from_file_location("custom_sd3_inpaint_pipeline", pipeline_file)
+        # Patch known batch-size bug in upstream custom pipeline:
+        # latent_timestep should repeat by batch*num_images_per_prompt, not batch*num_inference_steps.
+        with open(pipeline_file, "r", encoding="utf-8") as f:
+            source = f.read()
+        buggy = "latent_timestep = timesteps[:1].repeat(batch_size * num_inference_steps)"
+        fixed = "latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)"
+        if buggy in source:
+            source = source.replace(buggy, fixed)
+        patched_file = f"{tempfile.gettempdir()}/pipeline_stable_diffusion_3_inpaint_patched.py"
+        with open(patched_file, "w", encoding="utf-8") as f:
+            f.write(source)
+
+        spec = importlib.util.spec_from_file_location("custom_sd3_inpaint_pipeline", patched_file)
         if spec is None or spec.loader is None:
             raise RuntimeError("Failed to create module spec for custom SD3 inpaint pipeline")
         mod = importlib.util.module_from_spec(spec)
@@ -313,6 +345,17 @@ def _resize_for_inpaint(
     return img_r, mask_r, (ow, oh)
 
 
+def _center_crop_multiple_of_64(image: Image.Image) -> tuple[Image.Image, tuple[int, int, int, int]]:
+    w, h = image.size
+    cw = max(64, (w // 64) * 64)
+    ch = max(64, (h // 64) * 64)
+    left = max(0, (w - cw) // 2)
+    top = max(0, (h - ch) // 2)
+    right = left + cw
+    bottom = top + ch
+    return image.crop((left, top, right, bottom)), (left, top, right, bottom)
+
+
 @torch.no_grad()
 def run_sd3_inpaint(
     image: Image.Image,
@@ -323,32 +366,48 @@ def run_sd3_inpaint(
     guidance_scale: float = 7.0,
     seed: int = -1,
     max_side: int = 1024,
+    strength: float = 0.6,
 ) -> dict[str, Any]:
     pipe, device, dtype = get_sd3_inpaint_pipeline()
     image = image.convert("RGB")
     mask = mask.convert("L").point(lambda p: 255 if p > 127 else 0)
 
-    image_r, mask_r, original_size = _resize_for_inpaint(image, mask, max_side=max_side)
+    if max(image.size) > int(max_side):
+        image, mask, _ = _resize_for_inpaint(image, mask, max_side=max_side)
+
+    original_size = image.size
+    image_c, crop_box = _center_crop_multiple_of_64(image)
+    mask_c, _ = _center_crop_multiple_of_64(mask)
+
+    image_t = transforms.ToTensor()(image_c).unsqueeze(0).to(device=device, dtype=dtype)
+    mask_t = transforms.ToTensor()(mask_c).to(device=device, dtype=dtype)
 
     generator = None
     if int(seed) >= 0:
-        generator = torch.Generator(device=device.type).manual_seed(int(seed))
+        generator = torch.Generator(device=str(device)).manual_seed(int(seed))
 
     result = pipe(
         prompt=prompt,
         negative_prompt=negative_prompt if negative_prompt.strip() else None,
-        image=image_r,
-        mask_image=mask_r,
+        image=image_t,
+        mask_image=mask_t,
+        height=image_t.shape[-2],
+        width=image_t.shape[-1],
         num_inference_steps=max(1, int(num_inference_steps)),
         guidance_scale=float(guidance_scale),
+        strength=float(strength),
         generator=generator,
     ).images[0]
 
-    if result.size != original_size:
-        result = result.resize(original_size, resample=Image.LANCZOS)
+    # Paste the generated crop back into the original canvas so output size stays stable.
+    left, top, right, bottom = crop_box
+    canvas = image.copy()
+    if result.size != (right - left, bottom - top):
+        result = result.resize((right - left, bottom - top), resample=Image.LANCZOS)
+    canvas.paste(result, (left, top))
 
     return {
-        "image": result,
+        "image": canvas,
         "device": str(device),
         "dtype": str(dtype).replace("torch.", ""),
         "model_id": SD3_INPAINT_MODEL_ID,
@@ -445,9 +504,7 @@ def health_detector() -> dict[str, Any]:
 @app.get("/health/vqa")
 def health_vqa() -> dict[str, Any]:
     loaded = _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None
-    device = str(_LLAVA_DEVICE) if loaded and _LLAVA_DEVICE is not None else str(
-        torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    device = str(_LLAVA_DEVICE) if loaded and _LLAVA_DEVICE is not None else str(pick_best_device())
     return {
         "ok": True,
         "model": LLAVA_MODEL_ID,
@@ -459,9 +516,7 @@ def health_vqa() -> dict[str, Any]:
 @app.get("/health/inpaint")
 def health_inpaint() -> dict[str, Any]:
     loaded = _SD3_INPAINT_PIPE is not None
-    device = str(_SD3_INPAINT_DEVICE) if loaded and _SD3_INPAINT_DEVICE is not None else str(
-        torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    device = str(_SD3_INPAINT_DEVICE) if loaded and _SD3_INPAINT_DEVICE is not None else str(pick_best_device())
     return {
         "ok": True,
         "model": SD3_INPAINT_MODEL_ID,
@@ -623,6 +678,7 @@ async def inpaint_sd3(
     negative_prompt: str = Form(""),
     num_inference_steps: int = Form(30),
     guidance_scale: float = Form(7.0),
+    strength: float = Form(0.6),
     seed: int = Form(-1),
     max_side: int = Form(1024),
 ) -> dict[str, Any]:
@@ -655,6 +711,7 @@ async def inpaint_sd3(
             negative_prompt=negative_prompt,
             num_inference_steps=int(num_inference_steps),
             guidance_scale=float(guidance_scale),
+            strength=float(strength),
             seed=int(seed),
             max_side=int(max_side),
         )
@@ -669,5 +726,6 @@ async def inpaint_sd3(
         "dtype": result["dtype"],
         "num_inference_steps": int(num_inference_steps),
         "guidance_scale": float(guidance_scale),
+        "strength": float(strength),
         "seed": int(seed),
     }

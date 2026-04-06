@@ -178,6 +178,7 @@ button.small {
 #maskPreviewImg,
 #inpaintResultImg,
 #segViewImg {
+  display: block;
   object-fit: contain;
 }
 

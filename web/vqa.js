@@ -1,5 +1,6 @@
 const API_KEY = "efficientsam_api_url_v1";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
 
 const els = {
   apiUrl: document.getElementById("apiUrl"),
@@ -21,6 +22,10 @@ const state = {
 
 function setStatus(msg) {
   els.status.textContent = msg;
+}
+
+function setEmptyImage(imgEl) {
+  imgEl.src = EMPTY_IMAGE_DATA_URL;
 }
 
 function looksLikeIpv4(host) {
@@ -147,5 +152,6 @@ els.askBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
+  setEmptyImage(els.preview);
   setStatus("이미지를 업로드하고 질문을 입력한 뒤 Ask LLaVA를 누르세요.");
 })();

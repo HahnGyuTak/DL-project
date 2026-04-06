@@ -1,5 +1,6 @@
 const API_KEY = "efficientsam_api_url_v1";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
 
 const els = {
   apiUrl: document.getElementById("apiUrl"),
@@ -30,6 +31,10 @@ const ctx = els.inputCanvas.getContext("2d");
 
 function setStatus(msg) {
   els.status.textContent = msg;
+}
+
+function setEmptyImage(imgEl) {
+  imgEl.src = EMPTY_IMAGE_DATA_URL;
 }
 
 function looksLikeIpv4(host) {
@@ -287,7 +292,7 @@ els.imageInput.addEventListener("change", () => {
     state.imageFile = file;
     state.imageObj = img;
     clearPrompts();
-    els.resultImg.removeAttribute("src");
+    setEmptyImage(els.resultImg);
     clearSegmentCrops();
     drawCanvas();
     setStatus(`이미지 로드됨: ${file.name} (${img.width}x${img.height})`);
@@ -397,6 +402,7 @@ els.runBtn.addEventListener("click", async () => {
 (function init() {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
+  setEmptyImage(els.resultImg);
   clearSegmentCrops();
   setStatus("이미지를 업로드하고 프롬프트를 클릭하세요.");
 })();

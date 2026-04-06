@@ -1,5 +1,6 @@
 const API_KEY = "efficientsam_api_url_v1";
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
 
 const els = {
   apiUrl: document.getElementById("apiUrl"),
@@ -48,6 +49,10 @@ const ctx = els.inputCanvas.getContext("2d");
 
 function setStatus(msg) {
   els.status.textContent = msg;
+}
+
+function setEmptyImage(imgEl) {
+  imgEl.src = EMPTY_IMAGE_DATA_URL;
 }
 
 function looksLikeIpv4(host) {
@@ -145,8 +150,8 @@ function clearDerivedOutputs() {
   state.viewImages.overlay = "";
   state.viewImages.mask = "";
   state.viewImages.cutout = "";
-  els.segViewImg.removeAttribute("src");
-  els.inpaintResultImg.removeAttribute("src");
+  setEmptyImage(els.segViewImg);
+  setEmptyImage(els.inpaintResultImg);
 }
 
 function toCanvasCoords(evt) {
@@ -181,7 +186,7 @@ function setActiveView(view) {
 function renderSegView() {
   const src = state.viewImages[state.currentView] || "";
   if (!src) {
-    els.segViewImg.removeAttribute("src");
+    setEmptyImage(els.segViewImg);
     return;
   }
   els.segViewImg.src = src;
@@ -378,7 +383,7 @@ els.runSegBtn.addEventListener("click", async () => {
     state.viewImages.cutout = await buildFullSizeCutout(state.maskPngB64);
     setActiveView("overlay");
     renderSegView();
-    els.inpaintResultImg.removeAttribute("src");
+    setEmptyImage(els.inpaintResultImg);
 
     setStatus(
       `세그멘테이션 완료 | device=${data.device} | checkpoint=${data.checkpoint} | best_idx=${data.best_idx}`
@@ -445,6 +450,8 @@ els.runInpaintBtn.addEventListener("click", async () => {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
   setActiveView("overlay");
+  setEmptyImage(els.segViewImg);
+  setEmptyImage(els.inpaintResultImg);
   renderSegView();
   setStatus("이미지를 업로드하고 세그멘테이션 후, 프롬프트로 SD3 인페인팅을 실행하세요.");
 })();

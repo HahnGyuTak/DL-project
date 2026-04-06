@@ -316,8 +316,17 @@ button.small {
   font: inherit;
 }
 
-.canvas-align-gap {
+.canvas-action-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: end;
+}
+
+.canvas-action-row button {
   min-height: 42px;
+  white-space: nowrap;
 }
 
 .inpaint-main-row {
@@ -386,12 +395,9 @@ button.small {
   }
 
   .vqa-ask-row,
+  .canvas-action-row,
   .inpaint-main-row,
   .advanced-grid {
     grid-template-columns: 1fr;
-  }
-
-  .canvas-align-gap {
-    min-height: 0;
   }
 }

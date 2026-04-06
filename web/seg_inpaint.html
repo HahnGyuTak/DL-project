@@ -56,20 +56,18 @@
           </label>
         </div>
 
-        <div class="row action-row">
-          <input id="imageInput" type="file" accept="image/*" />
-          <button id="undoBtn" class="ghost">Undo</button>
-          <button id="clearBtn" class="ghost">Clear</button>
-          <button id="runSegBtn">Run Segmentation</button>
-        </div>
-
         <p id="status" class="status"></p>
       </section>
 
       <section class="panel stage">
         <div class="col">
           <h2>Input + Prompts</h2>
-          <div class="canvas-align-gap" aria-hidden="true"></div>
+          <div class="canvas-action-row">
+            <input id="imageInput" type="file" accept="image/*" />
+            <button id="undoBtn" class="ghost">Undo</button>
+            <button id="clearBtn" class="ghost">Clear</button>
+            <button id="runSegBtn">Run Segmentation</button>
+          </div>
           <canvas id="inputCanvas"></canvas>
         </div>
         <div class="col">

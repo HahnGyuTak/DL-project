@@ -24,10 +24,22 @@ function setStatus(msg) {
   els.status.textContent = msg;
 }
 
+function looksLikeIpv4(host) {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host);
+}
+
 function normalizeApiUrl(raw) {
   const v = (raw || "").trim();
   if (!v) return "";
-  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  if (/^https?:\/\//i.test(v)) return v.replace(/\/+$/, "");
+
+  const hostPort = v.split("/")[0];
+  const host = hostPort.split(":")[0].toLowerCase();
+  const isLocal = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+  const hasPort = /:\d+$/.test(hostPort);
+  const isIp = looksLikeIpv4(host);
+  const scheme = isLocal || hasPort || isIp ? "http" : "https";
+  return `${scheme}://${v}`.replace(/\/+$/, "");
 }
 
 function getApiBase() {
@@ -39,6 +51,18 @@ function saveApiBase() {
   localStorage.setItem(API_KEY, base);
   els.apiUrl.value = base;
   setStatus(`API URL 저장됨: ${base}`);
+}
+
+function assertMixedContentSafe(base) {
+  const api = new URL(base);
+  const pageIsHttps = window.location.protocol === "https:";
+  const apiIsHttp = api.protocol === "http:";
+  const isLoopback = api.hostname === "localhost" || api.hostname === "127.0.0.1";
+  if (pageIsHttps && apiIsHttp && !isLoopback) {
+    throw new Error(
+      "HTTPS 페이지에서 HTTP API 호출은 브라우저가 차단됩니다. API를 HTTPS로 열거나, 로컬 http 페이지에서 실행하세요."
+    );
+  }
 }
 
 function setDetectionList(detections) {
@@ -72,6 +96,7 @@ els.saveApiBtn.addEventListener("click", () => {
 els.healthBtn.addEventListener("click", async () => {
   const base = getApiBase();
   try {
+    assertMixedContentSafe(base);
     const res = await fetch(`${base}/health/detector`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -106,6 +131,7 @@ els.runBtn.addEventListener("click", async () => {
   setStatus("디텍션 실행 중...");
 
   try {
+    assertMixedContentSafe(base);
     const res = await fetch(`${base}/detect/open-vocab`, {
       method: "POST",
       body: fd,
@@ -122,6 +148,12 @@ els.runBtn.addEventListener("click", async () => {
       `완료 | model=${data.model_id} | device=${data.device} | detections=${data.num_detections} | prompt="${data.text_prompt}"`
     );
   } catch (e) {
+    if (e instanceof TypeError) {
+      setStatus(
+        "실패: 네트워크 연결 오류입니다. API URL, 포트 오픈, CORS/HTTPS 설정을 확인하세요."
+      );
+      return;
+    }
     setStatus(`실패: ${e}`);
   }
 });

@@ -1,34 +1,44 @@
-# EfficientSAM Web Demo
+# EfficientSAM From-Scratch Demo
 
-`merve/EfficientSAM` 기반 포인트/박스 프롬프트 세그멘테이션 웹 데모입니다.
+외부 Hugging Face 데모 iframe 없이, 이 레포 코드로 직접 동작하는 구성입니다.
 
-## 1) 로컬 실행
+## 구성
+
+- `api_server.py`: EfficientSAM 추론 API (FastAPI)
+- `web/`: 정적 데모 프론트엔드 (Cloudflare Pages 배포 대상)
+
+## 1) 백엔드 실행
 
 ```bash
 cd /mnt/data/DL-project
-pip install -r requirements.txt
-python app.py
+pip install -r requirements_api.txt
+uvicorn api_server:app --host 0.0.0.0 --port 8000
 ```
 
-브라우저에서 `http://localhost:7860` 접속.
+헬스체크:
 
-## 2) 사용 방법
+```bash
+curl http://127.0.0.1:8000/health
+```
 
-- 이미지를 업로드
-- `Prompt Mode` 선택
-  - `point`: `Point Label`을 `foreground/background`로 바꿔가며 클릭
-  - `box`: 이미지에 두 번 클릭해서 박스 코너 지정
-- `Run Segmentation` 클릭
+## 2) 프론트 실행 (로컬 미리보기)
 
-## 3) Hugging Face Spaces 배포
+```bash
+cd /mnt/data/DL-project
+python -m http.server 8080 -d web
+```
 
-1. Hugging Face에서 `Gradio` Space 생성
-2. 이 폴더의 파일 업로드
-   - `app.py`
-   - `requirements.txt`
-3. Space가 자동 빌드되면 바로 웹 데모로 사용 가능
+브라우저에서 `http://127.0.0.1:8080` 접속 후,
+- API URL에 `http://127.0.0.1:8000` 입력
+- 이미지 업로드 + 포인트/박스 클릭 + Run
 
-## 참고
+## 3) Cloudflare Pages 배포
 
-- 앱은 시작 시 GPU 사용 가능하면 `efficient_sam_s_gpu.jit`를 로드하고,
-  실패하면 자동으로 CPU 체크포인트로 폴백합니다.
+```bash
+cd /mnt/data/DL-project
+npx wrangler pages deploy web --project-name model-dock --branch main
+```
+
+주의:
+- Pages는 정적 호스팅이므로 `api_server.py`는 별도 서버에서 실행되어야 합니다.
+- 배포 페이지에서 API URL을 해당 서버 주소로 입력해야 동작합니다.

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EfficientSAM Demo</title>
-    <meta name="description" content="EfficientSAM 세그멘테이션 데모 웹페이지" />
+    <meta name="description" content="EfficientSAM from-scratch demo" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -13,47 +13,64 @@
   <body>
     <main class="wrap">
       <header class="hero">
-        <p class="eyebrow">DEMO PAGE</p>
+        <p class="eyebrow">FROM SCRATCH DEMO</p>
         <h1>EfficientSAM Segmentation</h1>
-        <p class="desc">
-          이미지 업로드 후 포인트/박스 프롬프트로 세그멘테이션을 실행하는
-          <strong>단일 데모 페이지</strong>입니다.
-        </p>
+        <p class="desc">외부 HF 데모를 iframe으로 가져오지 않고, 이 프로젝트 API로 직접 추론합니다.</p>
       </header>
 
-      <section class="panel quick-guide">
-        <h2>사용 방법</h2>
-        <ol>
-          <li>아래 데모 화면에서 이미지 업로드</li>
-          <li>Point 또는 Box 모드 선택</li>
-          <li>이미지 클릭으로 프롬프트 입력 후 <code>Run Segmentation</code></li>
-        </ol>
-      </section>
-
-      <section class="panel viewer-panel">
-        <div class="viewer-head">
-          <h2>Live Demo</h2>
-          <div class="viewer-actions">
-            <a id="openNewTab" href="#" target="_blank" rel="noreferrer">새 탭으로 열기</a>
-            <button id="reloadBtn" type="button" class="ghost small">새로고침</button>
-          </div>
+      <section class="panel controls">
+        <div class="row api-row">
+          <label>
+            API URL
+            <input id="apiUrl" type="url" placeholder="https://your-api-server" />
+          </label>
+          <button id="saveApiBtn" class="small">저장</button>
+          <button id="healthBtn" class="ghost small">헬스체크</button>
         </div>
 
-        <div id="viewer" class="viewer"></div>
+        <div class="row">
+          <label>
+            Prompt Mode
+            <select id="modeSelect">
+              <option value="point">point</option>
+              <option value="box">box</option>
+            </select>
+          </label>
+
+          <label>
+            Point Label
+            <select id="labelSelect">
+              <option value="1">foreground</option>
+              <option value="0">background</option>
+            </select>
+          </label>
+
+          <label>
+            Input Size
+            <input id="inputSize" type="number" value="1024" min="512" max="1536" step="64" />
+          </label>
+        </div>
+
+        <div class="row action-row">
+          <input id="imageInput" type="file" accept="image/*" />
+          <button id="undoBtn" class="ghost">Undo</button>
+          <button id="clearBtn" class="ghost">Clear</button>
+          <button id="runBtn">Run Segmentation</button>
+        </div>
+
         <p id="status" class="status"></p>
       </section>
 
-      <details class="panel advanced">
-        <summary>고급 설정 (백엔드 URL 변경)</summary>
-        <p class="hint">
-          기본값은 공개 EfficientSAM 데모 URL입니다. 본인 백엔드(Gradio/HF Space)가 있으면 바꿔서 사용할 수 있습니다.
-        </p>
-        <div class="url-row">
-          <input id="demoUrl" type="url" placeholder="https://your-gradio-app-url" />
-          <button id="saveBtn" type="button">적용</button>
-          <button id="resetBtn" type="button" class="ghost">기본값</button>
+      <section class="panel stage">
+        <div class="col">
+          <h2>Input + Prompts</h2>
+          <canvas id="inputCanvas"></canvas>
         </div>
-      </details>
+        <div class="col">
+          <h2>Result Overlay</h2>
+          <img id="resultImg" alt="segmentation result" />
+        </div>
+      </section>
     </main>
 
     <script src="./app.js"></script>

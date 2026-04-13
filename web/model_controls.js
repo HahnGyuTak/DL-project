@@ -2,10 +2,10 @@
   const API_KEY = "efficientsam_api_url_v1";
   const DEFAULT_API_URL = "http://127.0.0.1:8000";
   const MODEL_LABELS = {
-    segmentation: "EfficientSAM",
-    detector: "Grounding DINO",
+    segmentation: "SAM",
+    detector: "DINO",
     vqa: "LLaVA",
-    inpaint: "SD3 Inpaint",
+    inpaint: "SD3",
   };
 
   const panel = document.getElementById("modelControlPanel");
@@ -56,62 +56,40 @@
 
   function memoryText(cuda) {
     if (!cuda?.available || !cuda.devices?.length) return "CUDA unavailable";
-    return cuda.devices
-      .map((gpu) => `GPU${gpu.index}: used ${gpu.used_mb}MB / reserved ${gpu.reserved_mb}MB`)
-      .join(" · ");
+    return cuda.devices.map((gpu) => `cuda:${gpu.index} ${gpu.used_mb}MB`).join(" · ");
   }
 
-  function render(models, cuda) {
+  function render(models) {
     panel.innerHTML = "";
-    const heading = document.createElement("div");
-    heading.className = "model-control-head";
-    heading.innerHTML = `<strong>GPU Model Controls</strong><span>${memoryText(cuda)}</span>`;
-    panel.appendChild(heading);
-
-    const grid = document.createElement("div");
-    grid.className = "model-control-grid";
+    panel.setAttribute("aria-label", "GPU model controls");
 
     for (const key of modelKeys) {
-      const model = models.find((item) => item.key === key) || { key, loaded: false, device: "unknown" };
-      const card = document.createElement("article");
-      card.className = "model-control-card";
+      const model = models.find((item) => item.key === key) || { key, loaded: false, device: "" };
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `model-toggle ${model.loaded ? "on" : "off"}`;
+      button.setAttribute("aria-pressed", model.loaded ? "true" : "false");
+      button.title = `${MODEL_LABELS[key] || key} ${model.loaded ? "unload" : "load"}`;
 
-      const title = document.createElement("div");
-      title.className = "model-control-title";
-      title.textContent = MODEL_LABELS[key] || model.name || key;
+      const label = document.createElement("span");
+      label.className = "model-toggle-name";
+      label.textContent = MODEL_LABELS[key] || key;
 
-      const badge = document.createElement("span");
-      badge.className = `model-badge ${model.loaded ? "on" : "off"}`;
-      const onLabel = String(model.device || "").startsWith("cuda") ? "GPU ON" : "CPU ON";
-      badge.textContent = model.loaded ? onLabel : "OFF";
+      const state = document.createElement("span");
+      state.className = "model-toggle-state";
+      state.textContent = model.loaded ? "ON" : "OFF";
 
-      const meta = document.createElement("p");
-      meta.className = "model-control-meta";
-      meta.textContent = `${model.device || "device?"}${model.dtype ? ` · ${model.dtype}` : ""}`;
+      button.append(label, state);
+      if (model.loaded) {
+        const device = document.createElement("span");
+        device.className = "model-toggle-device";
+        device.textContent = model.device || "loaded";
+        button.appendChild(device);
+      }
 
-      const actions = document.createElement("div");
-      actions.className = "model-control-actions";
-
-      const loadBtn = document.createElement("button");
-      loadBtn.type = "button";
-      loadBtn.className = "small";
-      loadBtn.textContent = "Load";
-      loadBtn.disabled = !!model.loaded;
-      loadBtn.addEventListener("click", () => mutateModel(key, "load"));
-
-      const unloadBtn = document.createElement("button");
-      unloadBtn.type = "button";
-      unloadBtn.className = "ghost small danger-soft";
-      unloadBtn.textContent = "Unload";
-      unloadBtn.disabled = !model.loaded;
-      unloadBtn.addEventListener("click", () => mutateModel(key, "unload"));
-
-      actions.append(loadBtn, unloadBtn);
-      card.append(title, badge, meta, actions);
-      grid.appendChild(card);
+      button.addEventListener("click", () => mutateModel(key, model.loaded ? "unload" : "load"));
+      panel.appendChild(button);
     }
-
-    panel.appendChild(grid);
   }
 
   async function refreshModels(silent = false) {
@@ -121,10 +99,10 @@
       const res = await fetch(`${base}/models`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      render(data.models || [], data.cuda);
+      render(data.models || []);
       if (!silent) setStatus(`모델 상태 업데이트 완료 | ${memoryText(data.cuda)}`);
     } catch (e) {
-      panel.innerHTML = `<p class="model-control-error">모델 상태를 불러오지 못함: ${e}</p>`;
+      panel.innerHTML = `<span class="model-toggle-error">model off?</span>`;
       if (!silent) setStatus(`모델 상태 실패: ${e}`);
     }
   }
@@ -142,7 +120,7 @@
       }
       const data = await res.json();
       await refreshModels(true);
-      setStatus(`${label} ${action === "load" ? "로드" : "언로드"} 완료 | ${memoryText(data.cuda)}`);
+      setStatus(`${label} ${action === "load" ? "ON" : "OFF"} 완료 | ${memoryText(data.cuda)}`);
     } catch (e) {
       setStatus(`${label} ${action === "load" ? "로드" : "언로드"} 실패: ${e}`);
     }

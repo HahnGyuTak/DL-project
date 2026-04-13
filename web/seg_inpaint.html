@@ -35,6 +35,7 @@
           </label>
           <button id="saveApiBtn" class="small">저장</button>
           <button id="healthBtn" class="ghost small">헬스체크</button>
+          <div id="modelControlPanel" class="model-control-panel" data-models="segmentation,inpaint"></div>
         </div>
 
         <div class="row">
@@ -59,9 +60,6 @@
             <input id="inputSize" type="number" value="1024" min="512" max="1536" step="64" />
           </label>
         </div>
-
-
-        <div id="modelControlPanel" class="model-control-panel" data-models="segmentation,inpaint"></div>
 
         <p id="status" class="status"></p>
       </section>
@@ -135,6 +133,6 @@
     </main>
 
     <script src="./seg_inpaint.js"></script>
-      <script src="./model_controls.js"></script>
+    <script src="./model_controls.js"></script>
   </body>
 </html>

@@ -1,6 +1,12 @@
+accelerate
+diffusers==0.31.0
 gradio>=4.0.0
+huggingface_hub
+matplotlib
 numpy
 pillow
+requests
+setuptools
 torch
 torchvision
-huggingface_hub
+transformers

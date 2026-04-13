@@ -1,5 +1,5 @@
 const API_KEY = "efficientsam_api_url_v1";
-const DEFAULT_API_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_URL = "http://localhost:8000";
 const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
 
 const els = {
@@ -36,7 +36,13 @@ function looksLikeIpv4(host) {
 function normalizeApiUrl(raw) {
   const v = (raw || "").trim();
   if (!v) return "";
-  if (/^https?:\/\//i.test(v)) return v.replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(v)) {
+    const url = new URL(v);
+    if (url.hostname === "127.0.0.1" || url.hostname === "0.0.0.0") {
+      url.hostname = "localhost";
+    }
+    return url.toString().replace(/\/+$/, "");
+  }
 
   const hostPort = v.split("/")[0];
   const host = hostPort.split(":")[0].toLowerCase();

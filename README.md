@@ -1,5 +1,4 @@
-# DL-project: AI Web Demo
-
+# XAI506 DeepLearning Project
 
 - EfficientSAM 세그멘테이션
 - Grounding DINO Open-vocabulary Detection

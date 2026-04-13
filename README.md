@@ -5,6 +5,8 @@
 - LLaVA VQA
 - Segmentation + SD3 Inpainting
 
+> [Web Demo Guidelines](docs/README_WEB_DEMO.md)
+
 ---
 
 ## 1. Set Up

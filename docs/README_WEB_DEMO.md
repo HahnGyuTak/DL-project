@@ -1,13 +1,6 @@
-# DL-project: AI Web Demo
+# DL-project: Web Demo
 
-
-- EfficientSAM 세그멘테이션
-- Grounding DINO Open-vocabulary Detection
-- LLaVA VQA
-- Segmentation + SD3 Inpainting
-
----
-
+`pip install -r requirements_api.txt`
 
 ## 1. 백엔드 서버 실행
 
@@ -55,44 +48,8 @@ curl http://127.0.0.1:8000/health/vqa
 curl http://127.0.0.1:8000/health/inpaint
 ```
 
----
 
-## 4. 웹 사용 순서
-
-웹 상단 탭에서 페이지를 전환합니다.
-
-### 4.1 EfficientSAM Segmentation
-
-1. 이미지 업로드
-2. 포인트/박스 프롬프트 입력
-3. `Run Segmentation`
-
-### 4.2 Grounding DINO Detection
-
-1. 이미지 업로드
-2. 라벨 입력 (`cat, remote control, sofa` 형태)
-3. `Run Detection`
-
-### 4.3 LLaVA VQA
-
-1. 이미지 업로드
-2. 질문 입력
-3. `Ask LLaVA`
-
-### 4.4 Seg + SD3 Inpaint
-
-1. 이미지 업로드
-2. 세그멘테이션 수행 (`Run Segmentation`)
-3. `Segmentation View`에서 `Overlay / Auto Mask / Segmented Crop` 클릭 전환
-4. 편집 프롬프트 입력
-5. `Run SD3 Inpaint`
-
-추가 옵션:
-- `Mask Expand(px)`: 세그멘테이션 마스크 경계 확장
-
----
-
-## 5. 자주 발생하는 문제
+## 4. 자주 발생하는 문제
 
 ### `TypeError: Failed to fetch`
 
@@ -115,7 +72,7 @@ curl http://127.0.0.1:8000/health/inpaint
 
 ---
 
-## 6. Cloudflare Pages 배포(선택)
+## 5. Cloudflare Pages 배포(선택)
 
 정적 프론트만 배포됩니다. (모델 추론 백엔드는 별도 서버 필요)
 

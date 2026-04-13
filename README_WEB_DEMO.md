@@ -1,32 +1,96 @@
-# Model Dock From-Scratch Demo
+# DL-project: AI Web Demo
 
-외부 Hugging Face 데모 iframe 없이, 이 레포 코드로 직접 동작하는 구성입니다.
 
-## 구성
+- EfficientSAM 세그멘테이션
+- Grounding DINO Open-vocabulary Detection
+- LLaVA VQA
+- Segmentation + SD3 Inpainting
 
-- `api_server.py`: FastAPI 백엔드
-  - `/segment`: EfficientSAM 세그멘테이션
-  - `/detect/open-vocab`: Grounding DINO open-vocabulary detection
-  - `/vqa/llava`: LLaVA 1.5 7B 기반 VQA
-  - `/inpaint/sd3`: Stable Diffusion 3 inpainting
-    - 커스텀 파이프라인: `IrohXu/stable-diffusion-3-inpainting`
-    - 베이스 모델: `stabilityai/stable-diffusion-3-medium-diffusers`
-- `web/`: 정적 데모 프론트엔드 (Cloudflare Pages 배포 대상)
-  - `index.html`: Segmentation 페이지
-  - `detection.html`: Detection 페이지
-  - `vqa.html`: LLaVA VQA 페이지
-  - `seg_inpaint.html`: Segmentation + SD3 Inpaint 페이지
-  - 상단 탭으로 페이지 전환
+---
 
-## 1) 백엔드 실행
+## 1. 요구사항
+
+- Python 3.10+ , `pip`
+- NVIDIA GPU + CUDA 환경
+- (선택) Cloudflare Pages 배포 시 `node`, `npm`, `wrangler`
+
+참고:
+- GPU가 있으면 서버가 자동으로 여유 GPU를 선택합니다.
+- 모델은 첫 실행 시 Hugging Face에서 다운로드되므로 시간이 오래 걸릴 수 있습니다.
+
+---
+
+## 2. 클론
 
 ```bash
-cd /mnt/data/DL-project
-pip install -r requirements_api.txt
-uvicorn api_server:app --host 0.0.0.0 --port 8000
+git clone https://github.com/HahnGyuTak/DL-project.git
+cd DL-project
 ```
 
-헬스체크:
+---
+
+## 3. Python 환경 준비
+
+가상환경 사용을 권장합니다. 아래 2가지 중 하나를 선택하세요.
+
+### 3.1 `venv` 사용
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements_api.txt
+```
+
+### 3.2 `conda` 사용
+
+```bash
+conda create -n dl-project python=3.10 -y
+conda activate dl-project
+pip install --upgrade pip
+pip install -r requirements_api.txt
+```
+
+---
+
+## 4. 백엔드 서버 실행
+
+```bash
+python -m uvicorn api_server:app --host 0.0.0.0 --port 8000
+```
+
+백그라운드 실행:
+
+```bash
+nohup python -m uvicorn api_server:app --host 0.0.0.0 --port 8000 > uvicorn_api.log 2>&1 &
+```
+
+서버 중지:
+
+```bash
+pkill -f "uvicorn api_server:app"
+```
+
+---
+
+## 5. 프론트 실행
+
+새 터미널에서:
+
+```bash
+python -m http.server 8080 -d web
+```
+
+브라우저 접속:
+
+- 로컬: `http://127.0.0.1:8080`
+- 같은 네트워크의 다른 PC: `http://<서버사설IP>:8080`
+
+---
+
+## 6. 헬스체크
+
+백엔드 정상 여부:
 
 ```bash
 curl http://127.0.0.1:8000/health
@@ -35,29 +99,75 @@ curl http://127.0.0.1:8000/health/vqa
 curl http://127.0.0.1:8000/health/inpaint
 ```
 
-## 2) 프론트 실행 (로컬 미리보기)
+---
+
+## 7. 웹 사용 순서
+
+웹 상단 탭에서 페이지를 전환합니다.
+
+### 7.1 EfficientSAM Segmentation
+
+1. 이미지 업로드
+2. 포인트/박스 프롬프트 입력
+3. `Run Segmentation`
+
+### 7.2 Grounding DINO Detection
+
+1. 이미지 업로드
+2. 라벨 입력 (`cat, remote control, sofa` 형태)
+3. `Run Detection`
+
+### 7.3 LLaVA VQA
+
+1. 이미지 업로드
+2. 질문 입력
+3. `Ask LLaVA`
+
+### 7.4 Seg + SD3 Inpaint
+
+1. 이미지 업로드
+2. 세그멘테이션 수행 (`Run Segmentation`)
+3. `Segmentation View`에서 `Overlay / Auto Mask / Segmented Crop` 클릭 전환
+4. 편집 프롬프트 입력
+5. `Run SD3 Inpaint`
+
+추가 옵션:
+- `Mask Expand(px)`: 세그멘테이션 마스크 경계 확장
+
+---
+
+## 8. 자주 발생하는 문제
+
+### `TypeError: Failed to fetch`
+
+- API URL이 잘못됐거나, 브라우저의 HTTPS/HTTP 혼합 정책에 막힌 경우입니다.
+- `https://...pages.dev`에서 API를 `http://...`로 호출하면 차단될 수 있습니다.
+
+### 첫 요청이 너무 느림
+
+- 정상입니다. 모델 다운로드/초기 로딩 시간입니다.
+- 특히 LLaVA/SD3는 첫 요청이 오래 걸립니다.
+
+### SD3 inpaint 실패/메모리 부족
+
+- 다른 프로세스가 GPU 메모리를 점유 중일 수 있습니다.
+- `nvidia-smi`로 확인 후 정리하거나, 입력 해상도/steps를 낮추세요.
+
+### 포트 충돌
+
+- 8000 또는 8080이 이미 사용 중이면 다른 포트로 실행하세요.
+
+---
+
+## 9. Cloudflare Pages 배포(선택)
+
+정적 프론트만 배포됩니다. (모델 추론 백엔드는 별도 서버 필요)
 
 ```bash
-cd /mnt/data/DL-project
-python -m http.server 8080 -d web
-```
-
-브라우저에서 `http://127.0.0.1:8080` 접속 후,
-- API URL에 `http://127.0.0.1:8000` 입력
-- Segmentation 탭: 이미지 업로드 + 포인트/박스 클릭 + Run
-- Detection 탭: 이미지 업로드 + labels 입력 + Run
-- LLaVA VQA 탭: 이미지 업로드 + 질문 입력 + Ask LLaVA
-- Seg + SD3 Inpaint 탭: 세그멘테이션 -> 자동 마스크 -> 편집 프롬프트 인페인팅
-  - `Mask Expand(px)`로 마스크 경계를 바깥으로 확장 가능 (기본 12px)
-  - Segmentation View에서 `Overlay / Auto Mask / Segmented Crop` 클릭 전환
-
-## 3) Cloudflare Pages 배포
-
-```bash
-cd /mnt/data/DL-project
+npm i
 npx wrangler pages deploy web --project-name model-dock --branch main
 ```
 
-주의:
-- Pages는 정적 호스팅이므로 `api_server.py`는 별도 서버에서 실행되어야 합니다.
-- 배포 페이지에서 API URL을 해당 서버 주소로 입력해야 동작합니다.
+배포 후에도 웹에서 `API URL`은 실제 백엔드 주소로 설정해야 합니다.
+
+[Cloudflare Pages 배포 세부 가이드라인](./README_CLOUDFLARE.md)

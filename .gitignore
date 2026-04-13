@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .wrangler/
 web_demo.log
+seg_sd3_inpaint_xai506_example.ipynb

@@ -7,6 +7,7 @@ const els = {
   apiUrl: document.getElementById("apiUrl"),
   saveApiBtn: document.getElementById("saveApiBtn"),
   healthBtn: document.getElementById("healthBtn"),
+  unloadBtn: document.getElementById("unloadBtn"),
   labelsInput: document.getElementById("labelsInput"),
   thresholdInput: document.getElementById("thresholdInput"),
   textThresholdInput: document.getElementById("textThresholdInput"),
@@ -78,6 +79,17 @@ function assertMixedContentSafe(base) {
       "HTTPS 페이지에서 HTTP API 호출은 브라우저가 차단됩니다. API를 HTTPS로 열거나, 로컬 http 페이지에서 실행하세요."
     );
   }
+}
+
+function setUnloadStatus(data) {
+  const unloaded = Object.entries(data.unloaded || {})
+    .filter(([, didUnload]) => didUnload)
+    .map(([name]) => name)
+    .join(", ") || "none";
+  const before = (data.cuda_memory_before || []).reduce((sum, gpu) => sum + (gpu.used_mib || 0), 0);
+  const after = (data.cuda_memory_after || []).reduce((sum, gpu) => sum + (gpu.used_mib || 0), 0);
+  const freed = Math.max(0, before - after);
+  setStatus(`모델 언로드 완료 | unloaded=${unloaded} | freed≈${freed.toFixed(1)} MiB`);
 }
 
 function setDetectionList(detections) {
@@ -220,6 +232,19 @@ els.healthBtn.addEventListener("click", async () => {
     setStatus(`health ok | model=${data.model} | device=${data.device}`);
   } catch (e) {
     setStatus(`health 실패: ${e}`);
+  }
+});
+
+els.unloadBtn.addEventListener("click", async () => {
+  const base = getApiBase();
+  try {
+    assertMixedContentSafe(base);
+    setStatus("GPU 모델 언로드 중...");
+    const res = await fetch(`${base}/admin/unload-models`, { method: "POST" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setUnloadStatus(await res.json());
+  } catch (e) {
+    setStatus(`모델 언로드 실패: ${e}`);
   }
 });
 

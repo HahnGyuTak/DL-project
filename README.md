@@ -5,7 +5,7 @@
 - LLaVA VQA
 - Segmentation + SD3 Inpainting
 
-> [Web Demo](model-dock.pages.dev/)
+> [Web Demo](https://model-dock.pages.dev/)
 
 > [Web Demo Guidelines](docs/README_WEB_DEMO.md)
 

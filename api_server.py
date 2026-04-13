@@ -1,4 +1,5 @@
 import base64
+import gc
 import importlib.util
 import io
 import json
@@ -191,6 +192,132 @@ def get_sd3_inpaint_pipeline() -> tuple[Any, torch.device, torch.dtype]:
         _SD3_INPAINT_DTYPE = dtype
         return _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
 
+
+
+def cuda_memory_snapshot() -> dict[str, Any]:
+    if not torch.cuda.is_available():
+        return {"available": False, "devices": []}
+
+    devices = []
+    for idx in range(torch.cuda.device_count()):
+        try:
+            free_bytes, total_bytes = torch.cuda.mem_get_info(idx)
+        except Exception:
+            free_bytes, total_bytes = 0, 0
+        devices.append(
+            {
+                "index": idx,
+                "free_mb": round(free_bytes / (1024 * 1024), 1),
+                "total_mb": round(total_bytes / (1024 * 1024), 1),
+                "used_mb": round((total_bytes - free_bytes) / (1024 * 1024), 1),
+                "allocated_mb": round(torch.cuda.memory_allocated(idx) / (1024 * 1024), 1),
+                "reserved_mb": round(torch.cuda.memory_reserved(idx) / (1024 * 1024), 1),
+            }
+        )
+    return {"available": True, "devices": devices}
+
+
+def release_cuda_memory() -> None:
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
+
+def model_state(model_key: str) -> dict[str, Any]:
+    if model_key == "segmentation":
+        loaded = _MODEL is not None
+        return {
+            "key": model_key,
+            "name": "EfficientSAM Segmentation",
+            "model": REPO_ID,
+            "loaded": loaded,
+            "device": str(_DEVICE) if loaded and _DEVICE is not None else str(pick_best_device()),
+            "checkpoint": _CHECKPOINT if loaded else None,
+        }
+    if model_key == "detector":
+        loaded = _DINO_MODEL is not None and _DINO_PROCESSOR is not None
+        return {
+            "key": model_key,
+            "name": "Grounding DINO Detection",
+            "model": GROUNDING_DINO_MODEL_ID,
+            "loaded": loaded,
+            "device": str(_DINO_DEVICE) if loaded and _DINO_DEVICE is not None else str(pick_best_device()),
+        }
+    if model_key == "vqa":
+        loaded = _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None
+        return {
+            "key": model_key,
+            "name": "LLaVA VQA",
+            "model": LLAVA_MODEL_ID,
+            "loaded": loaded,
+            "device": str(_LLAVA_DEVICE) if loaded and _LLAVA_DEVICE is not None else str(pick_best_device()),
+            "dtype": str(_LLAVA_DTYPE).replace("torch.", "") if loaded and _LLAVA_DTYPE is not None else None,
+        }
+    if model_key == "inpaint":
+        loaded = _SD3_INPAINT_PIPE is not None
+        return {
+            "key": model_key,
+            "name": "SD3 Inpaint",
+            "model": SD3_INPAINT_MODEL_ID,
+            "base_model": SD3_BASE_MODEL_ID,
+            "loaded": loaded,
+            "device": str(_SD3_INPAINT_DEVICE) if loaded and _SD3_INPAINT_DEVICE is not None else str(pick_best_device()),
+            "dtype": str(_SD3_INPAINT_DTYPE).replace("torch.", "") if loaded and _SD3_INPAINT_DTYPE is not None else None,
+        }
+    raise HTTPException(status_code=404, detail=f"Unknown model key: {model_key}")
+
+
+def all_model_states() -> list[dict[str, Any]]:
+    return [model_state(key) for key in ("segmentation", "detector", "vqa", "inpaint")]
+
+
+def load_model_by_key(model_key: str) -> dict[str, Any]:
+    if model_key == "segmentation":
+        get_model()
+    elif model_key == "detector":
+        get_grounding_dino_model()
+    elif model_key == "vqa":
+        get_llava_model()
+    elif model_key == "inpaint":
+        get_sd3_inpaint_pipeline()
+    else:
+        raise HTTPException(status_code=404, detail=f"Unknown model key: {model_key}")
+    return model_state(model_key)
+
+
+def unload_model_by_key(model_key: str) -> dict[str, Any]:
+    global _MODEL, _DEVICE, _CHECKPOINT
+    global _DINO_MODEL, _DINO_PROCESSOR, _DINO_DEVICE
+    global _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
+    global _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
+
+    if model_key == "segmentation":
+        with _LOCK:
+            _MODEL = None
+            _DEVICE = None
+            _CHECKPOINT = None
+    elif model_key == "detector":
+        with _DINO_LOCK:
+            _DINO_MODEL = None
+            _DINO_PROCESSOR = None
+            _DINO_DEVICE = None
+    elif model_key == "vqa":
+        with _LLAVA_LOCK:
+            _LLAVA_MODEL = None
+            _LLAVA_PROCESSOR = None
+            _LLAVA_DEVICE = None
+            _LLAVA_DTYPE = None
+    elif model_key == "inpaint":
+        with _SD3_INPAINT_LOCK:
+            _SD3_INPAINT_PIPE = None
+            _SD3_INPAINT_DEVICE = None
+            _SD3_INPAINT_DTYPE = None
+    else:
+        raise HTTPException(status_code=404, detail=f"Unknown model key: {model_key}")
+
+    release_cuda_memory()
+    return model_state(model_key)
 
 def resize_longest_side(image: Image.Image, target: int = 1024) -> tuple[Image.Image, float]:
     w, h = image.size
@@ -490,48 +617,62 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health() -> dict:
-    _, device, checkpoint = get_model()
-    return {
-        "ok": True,
-        "model": REPO_ID,
-        "device": str(device),
-        "checkpoint": checkpoint,
-    }
+def health() -> dict[str, Any]:
+    state = model_state("segmentation")
+    return {"ok": True, **state}
 
 
 @app.get("/health/detector")
 def health_detector() -> dict[str, Any]:
-    _, _, device = get_grounding_dino_model()
-    return {
-        "ok": True,
-        "model": GROUNDING_DINO_MODEL_ID,
-        "device": str(device),
-    }
+    state = model_state("detector")
+    return {"ok": True, **state}
 
 
 @app.get("/health/vqa")
 def health_vqa() -> dict[str, Any]:
-    loaded = _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None
-    device = str(_LLAVA_DEVICE) if loaded and _LLAVA_DEVICE is not None else str(pick_best_device())
-    return {
-        "ok": True,
-        "model": LLAVA_MODEL_ID,
-        "loaded": loaded,
-        "device": device,
-    }
+    state = model_state("vqa")
+    return {"ok": True, **state}
 
 
 @app.get("/health/inpaint")
 def health_inpaint() -> dict[str, Any]:
-    loaded = _SD3_INPAINT_PIPE is not None
-    device = str(_SD3_INPAINT_DEVICE) if loaded and _SD3_INPAINT_DEVICE is not None else str(pick_best_device())
+    state = model_state("inpaint")
+    return {"ok": True, **state}
+
+
+@app.get("/models")
+def models() -> dict[str, Any]:
     return {
         "ok": True,
-        "model": SD3_INPAINT_MODEL_ID,
-        "base_model": SD3_BASE_MODEL_ID,
-        "loaded": loaded,
-        "device": device,
+        "models": all_model_states(),
+        "cuda": cuda_memory_snapshot(),
+    }
+
+
+@app.get("/models/{model_key}")
+def model_status(model_key: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "model": model_state(model_key),
+        "cuda": cuda_memory_snapshot(),
+    }
+
+
+@app.post("/models/{model_key}/load")
+def model_load(model_key: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "model": load_model_by_key(model_key),
+        "cuda": cuda_memory_snapshot(),
+    }
+
+
+@app.post("/models/{model_key}/unload")
+def model_unload(model_key: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "model": unload_model_by_key(model_key),
+        "cuda": cuda_memory_snapshot(),
     }
 
 

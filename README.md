@@ -55,14 +55,14 @@ pip install -r requirements_api.txt
 
 ### 2.2 Efficient SAM 
 
-[code](./efficientsam_segmentation.ipynb)
+[code](ipynb/efficientsam_segmentation.ipynb)
 
 ![SAM output](img/output_sam.webp)
 
 
 ### 2.3 Open vocab detection
 
-[code](./grounding_dino_open_vocab_detection.ipynb)
+[code](ipynb/grounding_dino_open_vocab_detection.ipynb)
 
 `candidate_labels = ['person']`
 
@@ -75,7 +75,7 @@ pip install -r requirements_api.txt
 
 ### 2.4 LLava VQA
 
-[code](./llava_vqa_xai506_example.ipynb)
+[code](ipynb/llava_vqa_xai506_example.ipynb)
 
 `question = 'What is happening in this image? Please answer in Korean.'`
 

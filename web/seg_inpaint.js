@@ -1,5 +1,5 @@
 const API_KEY = "efficientsam_api_url_v1";
-const DEFAULT_API_URL = "http://localhost:8000";
+const DEFAULT_API_URL = "http://127.0.0.1:8000";
 const EMPTY_IMAGE_DATA_URL = "data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=";
 const DEFAULT_ASPECT_RATIO = "2 / 1";
 
@@ -7,7 +7,6 @@ const els = {
   apiUrl: document.getElementById("apiUrl"),
   saveApiBtn: document.getElementById("saveApiBtn"),
   healthBtn: document.getElementById("healthBtn"),
-  unloadBtn: document.getElementById("unloadBtn"),
   modeSelect: document.getElementById("modeSelect"),
   labelSelect: document.getElementById("labelSelect"),
   inputSize: document.getElementById("inputSize"),
@@ -72,13 +71,7 @@ function looksLikeIpv4(host) {
 function normalizeApiUrl(raw) {
   const v = (raw || "").trim();
   if (!v) return "";
-  if (/^https?:\/\//i.test(v)) {
-    const url = new URL(v);
-    if (url.hostname === "127.0.0.1" || url.hostname === "0.0.0.0") {
-      url.hostname = "localhost";
-    }
-    return url.toString().replace(/\/+$/, "");
-  }
+  if (/^https?:\/\//i.test(v)) return v.replace(/\/+$/, "");
 
   const hostPort = v.split("/")[0];
   const host = hostPort.split(":")[0].toLowerCase();
@@ -110,17 +103,6 @@ function assertMixedContentSafe(base) {
       "HTTPS 페이지에서 HTTP API 호출은 브라우저가 차단됩니다. API를 HTTPS로 열거나, 로컬 http 페이지에서 실행하세요."
     );
   }
-}
-
-function setUnloadStatus(data) {
-  const unloaded = Object.entries(data.unloaded || {})
-    .filter(([, didUnload]) => didUnload)
-    .map(([name]) => name)
-    .join(", ") || "none";
-  const before = (data.cuda_memory_before || []).reduce((sum, gpu) => sum + (gpu.used_mib || 0), 0);
-  const after = (data.cuda_memory_after || []).reduce((sum, gpu) => sum + (gpu.used_mib || 0), 0);
-  const freed = Math.max(0, before - after);
-  setStatus(`모델 언로드 완료 | unloaded=${unloaded} | freed≈${freed.toFixed(1)} MiB`);
 }
 
 function drawCanvas() {
@@ -365,19 +347,6 @@ els.healthBtn.addEventListener("click", async () => {
     );
   } catch (e) {
     setStatus(`health 실패: ${e}`);
-  }
-});
-
-els.unloadBtn.addEventListener("click", async () => {
-  const base = getApiBase();
-  try {
-    assertMixedContentSafe(base);
-    setStatus("GPU 모델 언로드 중...");
-    const res = await fetch(`${base}/admin/unload-models`, { method: "POST" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    setUnloadStatus(await res.json());
-  } catch (e) {
-    setStatus(`모델 언로드 실패: ${e}`);
   }
 });
 

@@ -1,5 +1,4 @@
 import base64
-import gc
 import importlib.util
 import io
 import json
@@ -43,79 +42,6 @@ _SD3_INPAINT_PIPE = None
 _SD3_INPAINT_DEVICE = None
 _SD3_INPAINT_DTYPE = None
 _SD3_INPAINT_LOCK = threading.Lock()
-
-
-def cuda_memory_snapshot() -> list[dict[str, Any]]:
-    if not torch.cuda.is_available():
-        return []
-
-    stats: list[dict[str, Any]] = []
-    for idx in range(torch.cuda.device_count()):
-        try:
-            free_bytes, total_bytes = torch.cuda.mem_get_info(idx)
-        except Exception:
-            continue
-        stats.append(
-            {
-                "index": idx,
-                "used_mib": round((total_bytes - free_bytes) / 1024 / 1024, 1),
-                "free_mib": round(free_bytes / 1024 / 1024, 1),
-                "total_mib": round(total_bytes / 1024 / 1024, 1),
-            }
-        )
-    return stats
-
-
-def empty_all_cuda_caches() -> None:
-    if not torch.cuda.is_available():
-        return
-
-    for idx in range(torch.cuda.device_count()):
-        try:
-            with torch.cuda.device(idx):
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
-        except Exception:
-            continue
-
-
-def unload_cached_models() -> dict[str, bool]:
-    global _MODEL, _DEVICE, _CHECKPOINT
-    global _DINO_MODEL, _DINO_PROCESSOR, _DINO_DEVICE
-    global _LLAVA_MODEL, _LLAVA_PROCESSOR, _LLAVA_DEVICE, _LLAVA_DTYPE
-    global _SD3_INPAINT_PIPE, _SD3_INPAINT_DEVICE, _SD3_INPAINT_DTYPE
-
-    unloaded = {
-        "efficient_sam": _MODEL is not None,
-        "grounding_dino": _DINO_MODEL is not None or _DINO_PROCESSOR is not None,
-        "llava": _LLAVA_MODEL is not None or _LLAVA_PROCESSOR is not None,
-        "sd3_inpaint": _SD3_INPAINT_PIPE is not None,
-    }
-
-    with _LOCK:
-        _MODEL = None
-        _DEVICE = None
-        _CHECKPOINT = None
-
-    with _DINO_LOCK:
-        _DINO_MODEL = None
-        _DINO_PROCESSOR = None
-        _DINO_DEVICE = None
-
-    with _LLAVA_LOCK:
-        _LLAVA_MODEL = None
-        _LLAVA_PROCESSOR = None
-        _LLAVA_DEVICE = None
-        _LLAVA_DTYPE = None
-
-    with _SD3_INPAINT_LOCK:
-        _SD3_INPAINT_PIPE = None
-        _SD3_INPAINT_DEVICE = None
-        _SD3_INPAINT_DTYPE = None
-
-    gc.collect()
-    empty_all_cuda_caches()
-    return unloaded
 
 
 def pick_best_device() -> torch.device:
@@ -560,7 +486,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_private_network=True,
 )
 
 
@@ -607,19 +532,6 @@ def health_inpaint() -> dict[str, Any]:
         "base_model": SD3_BASE_MODEL_ID,
         "loaded": loaded,
         "device": device,
-    }
-
-
-@app.post("/admin/unload-models")
-def admin_unload_models() -> dict[str, Any]:
-    before = cuda_memory_snapshot()
-    unloaded = unload_cached_models()
-    after = cuda_memory_snapshot()
-    return {
-        "ok": True,
-        "unloaded": unloaded,
-        "cuda_memory_before": before,
-        "cuda_memory_after": after,
     }
 
 

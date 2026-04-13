@@ -104,7 +104,7 @@ h1 {
 }
 
 .controls .api-row {
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr auto auto;
 }
 
 .controls .action-row {

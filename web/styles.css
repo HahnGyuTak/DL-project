@@ -182,7 +182,8 @@ button.small {
 #segResultImg,
 #maskPreviewImg,
 #inpaintResultImg,
-#segViewImg {
+#segViewImg,
+#chatImageView {
   width: 100%;
   min-height: 300px;
   border: 1px dashed #bac5d4;
@@ -196,7 +197,8 @@ button.small {
 #segResultImg,
 #maskPreviewImg,
 #inpaintResultImg,
-#segViewImg {
+#segViewImg,
+#chatImageView {
   display: block;
   object-fit: contain;
 }
@@ -506,5 +508,117 @@ button:disabled {
 @media (max-width: 980px) {
   .model-control-panel {
     justify-content: flex-start;
+  }
+}
+
+.chatbot-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.chat-visual-col,
+.chat-panel-col {
+  min-width: 0;
+}
+
+.chat-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.chat-view-switch {
+  margin-bottom: 0;
+  justify-content: flex-end;
+}
+
+.chat-view-switch button {
+  min-height: 42px;
+}
+
+.chat-panel-col {
+  display: grid;
+  grid-template-rows: minmax(330px, 1fr) auto auto;
+  gap: 10px;
+}
+
+.chat-thread {
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7fbff;
+  padding: 12px;
+  min-height: 330px;
+  max-height: 620px;
+}
+
+.chat-msg {
+  width: fit-content;
+  max-width: min(86%, 560px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.chat-msg.user {
+  margin-left: auto;
+  background: #0b5d76;
+  color: #fff;
+}
+
+.chat-msg.assistant {
+  margin-right: auto;
+  background: #ffffff;
+  color: #203047;
+  border: 1px solid #dbe5ef;
+}
+
+.chat-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.chat-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 42px;
+  max-height: 140px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.approve-btn {
+  justify-self: end;
+  border-color: #8eb99f;
+  background: #e8f7ee;
+  color: #145c35;
+}
+
+@media (max-width: 980px) {
+  .chatbot-grid,
+  .chat-toolbar,
+  .chat-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-view-switch,
+  .approve-btn {
+    justify-self: start;
+  }
+
+  .chat-panel-col {
+    grid-template-rows: minmax(260px, 1fr) auto auto;
   }
 }

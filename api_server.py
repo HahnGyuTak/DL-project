@@ -3,8 +3,10 @@ import gc
 import importlib.util
 import io
 import json
+import re
 import tempfile
 import threading
+import uuid
 from typing import Any
 
 import numpy as np
@@ -43,6 +45,9 @@ _SD3_INPAINT_PIPE = None
 _SD3_INPAINT_DEVICE = None
 _SD3_INPAINT_DTYPE = None
 _SD3_INPAINT_LOCK = threading.Lock()
+
+_CHAT_SESSIONS: dict[str, dict[str, Any]] = {}
+_CHAT_LOCK = threading.Lock()
 
 
 def pick_best_device() -> torch.device:
@@ -605,6 +610,259 @@ def run_llava_vqa(
     }
 
 
+
+def clean_short_text(value: str, max_words: int = 12) -> str:
+    text = (value or "").strip()
+    text = re.sub(r"^[`'\"“”]+|[`'\"“”.,:;!]+$", "", text)
+    text = re.sub(r"\s+", " ", text)
+    words = text.split()
+    if len(words) > max_words:
+        text = " ".join(words[:max_words])
+    return text.strip()
+
+
+def extract_target_label(message: str) -> str:
+    text = (message or "").strip()
+    if not text:
+        return ""
+
+    patterns = [
+        r"[`'\"“”]?([^`'\"“”]+?)[`'\"“”]?\s*(?:을|를)\s*(?:수정|편집|바꾸|변경|교체)",
+        r"(?:수정|편집|바꾸|변경|교체)\s*(?:하고\s*싶은|할)?\s*(?:대상|개체|물체|객체)?\s*[:：]?\s*([^.,!?\n]+)",
+        r"(?:edit|modify|change|replace)\s+(?:the\s+)?([^.,!?\n]+)",
+        r"([^.,!?\n]+?)\s*(?:을|를)?\s*수정하고\s*싶",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if not m:
+            continue
+        label = clean_short_text(m.group(1), max_words=8)
+        label = re.sub(r"^(?:이|그|저|the|a|an)\s+", "", label, flags=re.IGNORECASE).strip()
+        label = re.sub(r"\s*(?:을|를|이|가|은|는)$", "", label).strip()
+        if 1 <= len(label) <= 80:
+            return label
+    return ""
+
+
+def translate_target_label_for_detection(image: Image.Image, target_label: str, request: str) -> str:
+    label = clean_short_text(target_label, max_words=8)
+    if re.search(r"[A-Za-z]", label):
+        return label
+
+    korean_fallback = {
+        "사람": "person",
+        "남자": "man",
+        "여자": "woman",
+        "강아지": "dog",
+        "개": "dog",
+        "고양이": "cat",
+        "자동차": "car",
+        "차": "car",
+        "컵": "cup",
+        "모자": "hat",
+        "의자": "chair",
+        "테이블": "table",
+        "책상": "desk",
+        "가방": "bag",
+        "신발": "shoes",
+        "셔츠": "shirt",
+        "얼굴": "face",
+    }
+    if label in korean_fallback:
+        return korean_fallback[label]
+
+    try:
+        question = (
+            "The user is asking to edit an object in this image. "
+            f"User request: {request!r}. Target phrase: {label!r}. "
+            "Return only a short English object label for object detection, no sentence, no punctuation."
+        )
+        result = run_llava_vqa(image=image, question=question, max_new_tokens=24, temperature=0.0)
+        translated = clean_short_text(result.get("answer", ""), max_words=6)
+        translated = re.sub(r"^(?:the|a|an)\s+", "", translated, flags=re.IGNORECASE).strip()
+        if translated and len(translated) <= 60:
+            return translated
+    except Exception:
+        pass
+    return label
+
+
+def make_chat_segmentation_overlay(
+    image: Image.Image,
+    mask: np.ndarray,
+    detection: dict[str, Any],
+    target_label: str,
+) -> Image.Image:
+    overlay = make_overlay(image, mask)
+    draw = ImageDraw.Draw(overlay)
+    x0, y0, x1, y1 = detection["box_xyxy"]
+    draw.rectangle([x0, y0, x1, y1], outline=(34, 197, 94), width=4)
+    text = f"{target_label}: {detection['score']:.3f}"
+    tx = max(0.0, x0)
+    ty = max(0.0, y0 - 22.0)
+    draw.rectangle([tx, ty, tx + (len(text) * 7) + 10, ty + 19], fill=(34, 197, 94))
+    draw.text((tx + 5, ty + 2), text, fill=(0, 0, 0))
+    return overlay
+
+
+def segment_target_from_text(image: Image.Image, target_label: str) -> dict[str, Any]:
+    prompt = build_text_prompt([target_label])
+    detection_result = run_open_vocab_detection(
+        image=image,
+        text_prompt=prompt,
+        threshold=0.25,
+        text_threshold=0.20,
+    )
+    detections = detection_result["detections"]
+    if not detections:
+        detection_result = run_open_vocab_detection(
+            image=image,
+            text_prompt=prompt,
+            threshold=0.15,
+            text_threshold=0.15,
+        )
+        detections = detection_result["detections"]
+    if not detections:
+        raise ValueError(f"'{target_label}' 객체를 이미지에서 찾지 못했습니다.")
+
+    best = max(detections, key=lambda item: item["score"])
+    x0, y0, x1, y1 = best["box_xyxy"]
+    points = [[int(round(x0)), int(round(y0))], [int(round(x1)), int(round(y1))]]
+    seg_result = run_inference(image, points, [2, 3], input_size=1024)
+    mask = seg_result["mask"]
+    mask_img = Image.fromarray(mask.astype(np.uint8) * 255, mode="L")
+    overlay = make_chat_segmentation_overlay(image, mask, best, target_label)
+    return {
+        "target_label": target_label,
+        "text_prompt": prompt,
+        "detection": best,
+        "mask": mask_img,
+        "overlay": overlay,
+        "device": seg_result["device"],
+        "checkpoint": seg_result["checkpoint"],
+    }
+
+
+def build_sd3_prompt_with_llava(image: Image.Image, target_label: str, edit_request: str) -> str:
+    fallback = clean_short_text(edit_request, max_words=28) or f"edit the selected {target_label}"
+    try:
+        question = (
+            "Write one concise English Stable Diffusion inpainting prompt. "
+            f"Masked object: {target_label}. User edit request: {edit_request}. "
+            "Describe the desired final appearance only. Do not mention masks or instructions."
+        )
+        result = run_llava_vqa(image=image, question=question, max_new_tokens=96, temperature=0.2)
+        candidate = clean_short_text(result.get("answer", ""), max_words=32)
+        if candidate:
+            fallback = candidate
+    except Exception:
+        pass
+
+    return (
+        f"{fallback}, preserve the original scene composition, lighting, camera angle, and background, "
+        f"edit only the selected {target_label}, high quality, realistic, seamless integration"
+    )
+
+
+def is_approval_message(message: str) -> bool:
+    text = (message or "").strip().lower()
+    exact_approvals = {"응", "네", "좋아", "ㅇㅇ", "yes", "y", "ok", "okay"}
+    approval_phrases = ["진행", "진행해", "승인", "수정 진행", "proceed", "go ahead"]
+    return text in exact_approvals or any(phrase in text for phrase in approval_phrases)
+
+
+def is_cancel_message(message: str) -> bool:
+    text = (message or "").strip().lower()
+    cancels = ["아니", "취소", "다시", "no", "cancel", "stop"]
+    return any(word in text for word in cancels)
+
+
+def public_chat_response(session: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    response = {
+        "ok": True,
+        "session_id": session["id"],
+        "stage": session["stage"],
+        "target_label": session.get("target_label"),
+        "detection_label": session.get("detection_label"),
+        "assistant_message": session.get("assistant_message", ""),
+        "proposed_prompt": session.get("proposed_prompt", ""),
+    }
+    response.update(extra)
+    return response
+
+
+def store_chat_session(session: dict[str, Any]) -> None:
+    with _CHAT_LOCK:
+        _CHAT_SESSIONS[session["id"]] = session
+
+
+def get_chat_session(session_id: str) -> dict[str, Any]:
+    with _CHAT_LOCK:
+        session = _CHAT_SESSIONS.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="chat session not found")
+    return session
+
+
+def create_unsegmented_chat_session(image: Image.Image, message: str, assistant_message: str, stage: str) -> dict[str, Any]:
+    session = {
+        "id": uuid.uuid4().hex,
+        "original_image": image.copy(),
+        "current_image": image.copy(),
+        "target_label": "",
+        "detection_label": "",
+        "mask": None,
+        "overlay": None,
+        "proposed_prompt": "",
+        "stage": stage,
+        "assistant_message": assistant_message,
+        "history": [{"role": "user", "content": message}, {"role": "assistant", "content": assistant_message}],
+    }
+    store_chat_session(session)
+    return session
+
+
+def segment_chat_session(session: dict[str, Any], message: str) -> dict[str, Any]:
+    target = extract_target_label(message)
+    if not target:
+        session["stage"] = "awaiting_target"
+        session["assistant_message"] = "수정할 개체를 다시 알려주세요. 예: '강아지를 수정하고 싶어.'"
+        return session
+
+    detection_label = translate_target_label_for_detection(session["current_image"], target, message)
+    try:
+        seg = segment_target_from_text(session["current_image"], detection_label)
+    except ValueError:
+        session["stage"] = "awaiting_target"
+        session["target_label"] = target
+        session["detection_label"] = detection_label
+        session["assistant_message"] = f"'{target}'를 이미지에서 찾지 못했어요. 더 구체적인 개체 이름으로 다시 알려주세요."
+        return session
+
+    session["target_label"] = target
+    session["detection_label"] = detection_label
+    session["mask"] = seg["mask"]
+    session["overlay"] = seg["overlay"]
+    session["stage"] = "awaiting_edit"
+    session["assistant_message"] = f"'{target}'로 보이는 영역을 표시했어요. 어떻게 수정하고 싶으세요?"
+    session["history"].append({"role": "assistant", "content": session["assistant_message"]})
+    return session
+
+
+def propose_chat_edit(session: dict[str, Any], message: str) -> dict[str, Any]:
+    prompt = build_sd3_prompt_with_llava(
+        image=session["current_image"],
+        target_label=session.get("detection_label") or session.get("target_label") or "object",
+        edit_request=message,
+    )
+    session["proposed_prompt"] = prompt
+    session["pending_edit_request"] = message
+    session["stage"] = "awaiting_approval"
+    session["assistant_message"] = f"SD3 인페인팅 프롬프트를 이렇게 정리했어요:\n\n{prompt}\n\n수정 진행할까요?"
+    session["history"].append({"role": "user", "content": message})
+    session["history"].append({"role": "assistant", "content": session["assistant_message"]})
+    return session
+
 app = FastAPI(title="EfficientSAM API", version="1.0.0")
 
 app.add_middleware(
@@ -674,6 +932,124 @@ def model_unload(model_key: str) -> dict[str, Any]:
         "model": unload_model_by_key(model_key),
         "cuda": cuda_memory_snapshot(),
     }
+
+
+@app.post("/chat/edit/sessions")
+async def create_chat_edit_session(
+    image: UploadFile = File(...),
+    message: str = Form(...),
+) -> dict[str, Any]:
+    content = await image.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Image file is empty")
+    if not message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
+
+    try:
+        pil = Image.open(io.BytesIO(content)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to decode image: {e}") from e
+
+    session = create_unsegmented_chat_session(
+        image=pil,
+        message=message,
+        assistant_message="수정할 개체를 찾는 중입니다.",
+        stage="segmenting",
+    )
+    session = segment_chat_session(session, message)
+    store_chat_session(session)
+
+    extra: dict[str, Any] = {}
+    if session.get("overlay") is not None:
+        extra["overlay_png_b64"] = encode_png(session["overlay"])
+    if session.get("mask") is not None:
+        extra["mask_png_b64"] = encode_png(session["mask"])
+    return public_chat_response(session, **extra)
+
+
+@app.post("/chat/edit/sessions/{session_id}/messages")
+async def chat_edit_message(
+    session_id: str,
+    message: str = Form(...),
+    num_inference_steps: int = Form(30),
+    guidance_scale: float = Form(7.0),
+    strength: float = Form(0.6),
+    mask_expand_px: int = Form(12),
+    seed: int = Form(-1),
+    max_side: int = Form(1024),
+) -> dict[str, Any]:
+    if not message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
+
+    session = get_chat_session(session_id)
+    stage = session.get("stage")
+
+    if stage in {"awaiting_target", "segmenting"}:
+        session = segment_chat_session(session, message)
+        store_chat_session(session)
+        extra: dict[str, Any] = {}
+        if session.get("overlay") is not None:
+            extra["overlay_png_b64"] = encode_png(session["overlay"])
+        if session.get("mask") is not None:
+            extra["mask_png_b64"] = encode_png(session["mask"])
+        return public_chat_response(session, **extra)
+
+    if stage == "awaiting_approval" and is_approval_message(message):
+        if session.get("mask") is None or not session.get("proposed_prompt"):
+            session["stage"] = "awaiting_edit"
+            session["assistant_message"] = "진행할 수정 프롬프트가 없어요. 수정 내용을 다시 알려주세요."
+            store_chat_session(session)
+            return public_chat_response(session)
+        try:
+            result = run_sd3_inpaint(
+                image=session["current_image"],
+                mask=session["mask"],
+                prompt=session["proposed_prompt"],
+                negative_prompt="blurry, low quality, artifacts, distorted",
+                num_inference_steps=int(num_inference_steps),
+                guidance_scale=float(guidance_scale),
+                strength=float(strength),
+                mask_expand_px=int(mask_expand_px),
+                seed=int(seed),
+                max_side=int(max_side),
+            )
+        except Exception as e:
+            session["assistant_message"] = f"SD3 수정에 실패했어요. 같은 프롬프트로 다시 진행하거나 수정 요청을 바꿔주세요: {e}"
+            store_chat_session(session)
+            return public_chat_response(session)
+
+        output = result["image"].convert("RGB")
+        session["current_image"] = output
+        if session.get("mask") is not None and session["mask"].size != output.size:
+            session["mask"] = session["mask"].resize(output.size, resample=Image.NEAREST)
+        session["stage"] = "completed"
+        session["assistant_message"] = "수정 이미지를 생성했어요. 추가로 바꾸고 싶은 점이 있으면 이어서 말해주세요."
+        session["history"].append({"role": "user", "content": message})
+        session["history"].append({"role": "assistant", "content": session["assistant_message"]})
+        store_chat_session(session)
+        return public_chat_response(
+            session,
+            output_png_b64=encode_png(output),
+            device=result["device"],
+            dtype=result["dtype"],
+            model_id=result["model_id"],
+        )
+
+    if stage == "awaiting_approval" and is_cancel_message(message):
+        session["stage"] = "awaiting_edit"
+        session["assistant_message"] = "좋아요. 수정 방향을 다시 알려주세요."
+        store_chat_session(session)
+        return public_chat_response(session)
+
+    if session.get("mask") is None:
+        session["stage"] = "awaiting_target"
+        session["assistant_message"] = "먼저 수정할 개체를 알려주세요. 예: '강아지를 수정하고 싶어.'"
+        store_chat_session(session)
+        return public_chat_response(session)
+
+    session = propose_chat_edit(session, message)
+    store_chat_session(session)
+    return public_chat_response(session)
 
 
 @app.post("/segment")

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Dock - MLLM Edit Chatbot</title>
+    <meta name="description" content="MLLM-guided segmentation and SD3 inpainting chatbot" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <nav class="topnav">
+        <a href="./index.html">EfficientSAM Segmentation</a>
+        <a href="./detection.html">Grounding DINO Detection</a>
+        <a href="./vqa.html">LLaVA VQA</a>
+        <a href="./seg_inpaint.html">Seg + SD3 Inpaint</a>
+        <a class="active" href="./chatbot.html">MLLM Edit Chatbot</a>
+      </nav>
+
+      <header class="hero">
+        <div class="hero-head">
+          <h1>MLLM Edit Chatbot</h1>
+          <p class="hero-meta">XAI506 DeepLearning Project
+2025011102 한규탁</p>
+        </div>
+      </header>
+
+      <section class="panel controls">
+        <div class="row api-row">
+          <label>
+            API URL
+            <input id="apiUrl" type="url" placeholder="https://your-api-server" />
+          </label>
+          <button id="saveApiBtn" class="small">저장</button>
+          <button id="healthBtn" class="ghost small">헬스체크</button>
+          <div id="modelControlPanel" class="model-control-panel" data-models="segmentation,detector,vqa,inpaint"></div>
+        </div>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section class="panel chatbot-grid">
+        <div class="chat-visual-col">
+          <div class="chat-toolbar">
+            <input id="imageInput" type="file" accept="image/*" />
+            <div class="view-switch chat-view-switch">
+              <button id="viewCurrentBtn" class="ghost active">Current</button>
+              <button id="viewOverlayBtn" class="ghost">Segmentation</button>
+              <button id="viewMaskBtn" class="ghost">Mask</button>
+            </div>
+          </div>
+          <img id="chatImageView" alt="chatbot image view" src="data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=" />
+        </div>
+
+        <div class="chat-panel-col">
+          <div id="chatMessages" class="chat-thread"></div>
+          <form id="chatForm" class="chat-composer">
+            <textarea id="chatInput" rows="2" placeholder="예: 강아지를 수정하고 싶어."></textarea>
+            <button id="sendBtn" type="submit">Send</button>
+          </form>
+          <button id="approveBtn" class="ghost approve-btn" type="button" hidden>수정 진행</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="./chatbot.js"></script>
+    <script src="./model_controls.js"></script>
+  </body>
+</html>

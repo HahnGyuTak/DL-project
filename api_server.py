@@ -15,13 +15,15 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw, ImageFilter
-from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, LlavaForConditionalGeneration
+from qwen_vl_utils import process_vision_info
+from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, Qwen2_5_VLForConditionalGeneration
 from torchvision import transforms
 from torchvision.transforms import ToTensor
 
 REPO_ID = "merve/EfficientSAM"
 GROUNDING_DINO_MODEL_ID = "IDEA-Research/grounding-dino-tiny"
-LLAVA_MODEL_ID = "llava-hf/llava-1.5-7b-hf"
+VQA_MODEL_ID = "/mnt/data1/models/qwen/Qwen2.5-VL-7B-Instruct"
+VQA_MODEL_NAME = "Qwen2.5-VL-7B-Instruct"
 SD3_INPAINT_MODEL_ID = "IrohXu/stable-diffusion-3-inpainting"
 SD3_BASE_MODEL_ID = "stabilityai/stable-diffusion-3-medium-diffusers"
 
@@ -126,11 +128,17 @@ def get_llava_model() -> tuple[Any, Any, torch.device, torch.dtype]:
         device = pick_best_device()
         dtype = torch.float16 if device.type == "cuda" else torch.float32
 
-        processor = AutoProcessor.from_pretrained(LLAVA_MODEL_ID)
-        model = LlavaForConditionalGeneration.from_pretrained(
-            LLAVA_MODEL_ID,
+        processor = AutoProcessor.from_pretrained(
+            VQA_MODEL_ID,
+            min_pixels=256 * 28 * 28,
+            max_pixels=1024 * 28 * 28,
+            local_files_only=True,
+        )
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            VQA_MODEL_ID,
             torch_dtype=dtype,
-            attn_implementation="eager",
+            low_cpu_mem_usage=True,
+            local_files_only=True,
         ).to(device)
         model.eval()
 
@@ -253,8 +261,8 @@ def model_state(model_key: str) -> dict[str, Any]:
         loaded = _LLAVA_MODEL is not None and _LLAVA_PROCESSOR is not None
         return {
             "key": model_key,
-            "name": "LLaVA VQA",
-            "model": LLAVA_MODEL_ID,
+            "name": "Qwen2.5-VL VQA",
+            "model": VQA_MODEL_ID,
             "loaded": loaded,
             "device": str(_LLAVA_DEVICE) if loaded and _LLAVA_DEVICE is not None else str(pick_best_device()),
             "dtype": str(_LLAVA_DTYPE).replace("torch.", "") if loaded and _LLAVA_DTYPE is not None else None,
@@ -563,18 +571,27 @@ def run_llava_vqa(
     temperature: float = 0.2,
 ) -> dict[str, Any]:
     model, processor, device, dtype = get_llava_model()
-    prompt = f"USER: <image>\n{question.strip()}\nASSISTANT:"
-
-    inputs = processor(images=image, text=prompt, return_tensors="pt")
-    model_inputs: dict[str, Any] = {}
-    for k, v in inputs.items():
-        if torch.is_tensor(v):
-            if k == "pixel_values":
-                model_inputs[k] = v.to(device=device, dtype=dtype)
-            else:
-                model_inputs[k] = v.to(device=device)
-        else:
-            model_inputs[k] = v
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image.convert("RGB")},
+                {"type": "text", "text": question.strip()},
+            ],
+        }
+    ]
+    prompt = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    image_inputs, video_inputs = process_vision_info(messages)
+    inputs = processor(
+        text=[prompt],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )
+    model_inputs = inputs.to(device)
+    if "pixel_values" in model_inputs:
+        model_inputs["pixel_values"] = model_inputs["pixel_values"].to(dtype=dtype)
 
     do_sample = temperature > 0
     generation_kwargs: dict[str, Any] = {
@@ -605,7 +622,7 @@ def run_llava_vqa(
         "answer": answer,
         "device": str(device),
         "dtype": str(dtype).replace("torch.", ""),
-        "model_id": LLAVA_MODEL_ID,
+        "model_id": VQA_MODEL_ID,
         "prompt": prompt,
     }
 
@@ -1257,7 +1274,7 @@ async def vqa_llava(
             temperature=float(temperature),
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLaVA inference failed: {e}") from e
+        raise HTTPException(status_code=500, detail=f"Qwen2.5-VL inference failed: {e}") from e
 
     return {
         "answer": result["answer"],

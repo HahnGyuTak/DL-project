@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Model Dock - LLaVA VQA</title>
-    <meta name="description" content="LLaVA image question answering demo" />
+    <title>Model Dock - Qwen2.5-VL VQA</title>
+    <meta name="description" content="Qwen2.5-VL image question answering demo" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -15,14 +15,14 @@
       <nav class="topnav">
         <a href="./index.html">EfficientSAM Segmentation</a>
         <a href="./detection.html">Grounding DINO Detection</a>
-        <a class="active" href="./vqa.html">LLaVA VQA</a>
+        <a class="active" href="./vqa.html">Qwen2.5-VL VQA</a>
         <a href="./seg_inpaint.html">Seg + SD3 Inpaint</a>
         <a href="./chatbot.html">MLLM Edit Chatbot</a>
       </nav>
 
       <header class="hero">
         <div class="hero-head">
-          <h1>LLaVA VQA</h1>
+          <h1>Qwen2.5-VL VQA</h1>
           <p class="hero-meta">XAI506 DeepLearning Project
 2025011102 한규탁</p>
         </div>
@@ -53,7 +53,7 @@
           <h2>Question</h2>
           <div class="vqa-ask-row">
             <input id="questionInput" type="text" class="vqa-question-inline" placeholder="예: 이 이미지에서 사람이 무엇을 하고 있나요?" />
-            <button id="askBtn">Ask LLaVA</button>
+            <button id="askBtn">Ask Qwen</button>
           </div>
           <div class="vqa-hidden-controls">
             <label>
@@ -65,7 +65,7 @@
               <input id="temperatureInput" type="number" min="0" max="1" step="0.1" value="0.2" />
             </label>
           </div>
-          <h2>LLaVA Answer</h2>
+          <h2>Qwen2.5-VL Answer</h2>
           <pre id="answerBox" class="answer-box"></pre>
         </div>
       </section>

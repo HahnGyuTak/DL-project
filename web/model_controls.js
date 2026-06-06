@@ -4,7 +4,7 @@
   const MODEL_LABELS = {
     segmentation: "SAM",
     detector: "DINO",
-    vqa: "LLaVA",
+    vqa: "Qwen",
     inpaint: "SD3",
   };
 

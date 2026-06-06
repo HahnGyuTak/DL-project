@@ -9,4 +9,5 @@ requests
 setuptools
 torch
 torchvision
-transformers
+transformers>=4.49.0
+qwen-vl-utils

@@ -123,7 +123,7 @@ els.askBtn.addEventListener("click", async () => {
   fd.append("temperature", String(temperature));
 
   const base = getApiBase();
-  setStatus("LLaVA 답변 생성 중...");
+  setStatus("Qwen2.5-VL 답변 생성 중...");
   clearAnswer();
 
   try {
@@ -153,5 +153,5 @@ els.askBtn.addEventListener("click", async () => {
   const saved = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
   els.apiUrl.value = saved;
   setEmptyImage(els.preview);
-  setStatus("이미지를 업로드하고 질문을 입력한 뒤 Ask LLaVA를 누르세요.");
+  setStatus("이미지를 업로드하고 질문을 입력한 뒤 Ask Qwen를 누르세요.");
 })();

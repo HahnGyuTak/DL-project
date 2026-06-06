@@ -6,6 +6,7 @@ pillow
 torch
 torchvision
 huggingface_hub
-transformers
+transformers>=4.49.0
 diffusers==0.31.0
 accelerate
+qwen-vl-utils

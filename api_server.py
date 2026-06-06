@@ -644,32 +644,67 @@ def extract_target_label(message: str) -> str:
     return ""
 
 
+KOREAN_OBJECT_TERMS = {
+    "사람": "person",
+    "남자": "man",
+    "여자": "woman",
+    "강아지": "dog",
+    "개": "dog",
+    "고양이": "cat",
+    "자동차": "car",
+    "차": "car",
+    "컵": "cup",
+    "모자": "hat",
+    "의자": "chair",
+    "테이블": "table",
+    "책상": "desk",
+    "가방": "bag",
+    "신발": "shoes",
+    "셔츠": "shirt",
+    "얼굴": "face",
+}
+
+KOREAN_ATTRIBUTE_TERMS = {
+    "빨간": "red",
+    "빨강": "red",
+    "붉은": "red",
+    "파란": "blue",
+    "파랑": "blue",
+    "노란": "yellow",
+    "노랑": "yellow",
+    "검은": "black",
+    "검정": "black",
+    "하얀": "white",
+    "흰": "white",
+    "초록": "green",
+}
+
+
+def translate_known_korean_phrase(value: str) -> str:
+    text = clean_short_text(value, max_words=12)
+    text = re.sub(r"^(?:이|그|저)\s+", "", text).strip()
+    if text in KOREAN_OBJECT_TERMS:
+        return KOREAN_OBJECT_TERMS[text]
+
+    particle_stripped = re.sub(r"\s+(?:을|를|이|가|은|는)$", "", text).strip()
+    if particle_stripped in KOREAN_OBJECT_TERMS:
+        return KOREAN_OBJECT_TERMS[particle_stripped]
+
+    translated = text
+    for source, target in {**KOREAN_ATTRIBUTE_TERMS, **KOREAN_OBJECT_TERMS}.items():
+        translated = translated.replace(source, target)
+    translated = re.sub(r"\s+", " ", translated).strip()
+    return translated
+
+
 def translate_target_label_for_detection(image: Image.Image, target_label: str, request: str) -> str:
     label = clean_short_text(target_label, max_words=8)
     if re.search(r"[A-Za-z]", label):
         return label
 
-    korean_fallback = {
-        "사람": "person",
-        "남자": "man",
-        "여자": "woman",
-        "강아지": "dog",
-        "개": "dog",
-        "고양이": "cat",
-        "자동차": "car",
-        "차": "car",
-        "컵": "cup",
-        "모자": "hat",
-        "의자": "chair",
-        "테이블": "table",
-        "책상": "desk",
-        "가방": "bag",
-        "신발": "shoes",
-        "셔츠": "shirt",
-        "얼굴": "face",
-    }
-    if label in korean_fallback:
-        return korean_fallback[label]
+    known_label = translate_known_korean_phrase(label)
+    if known_label != label:
+        return known_label
 
     try:
         question = (
@@ -743,17 +778,56 @@ def segment_target_from_text(image: Image.Image, target_label: str) -> dict[str,
     }
 
 
+def extract_replacement_label(edit_request: str) -> str:
+    text = (edit_request or "").strip()
+    patterns = [
+        r"(?:.+?(?:을|를)\s*)?([^.,!?\n]+?)(?:으?로)\s*(?:바꿔|변경|교체|만들)",
+        r"(?:replace|change)\s+(?:the\s+)?(?:selected\s+)?[^.,!?\n]+?\s+(?:with|to)\s+(?:a\s+|an\s+|the\s+)?([^.,!?\n]+)",
+        r"(?:turn|make)\s+(?:the\s+)?(?:selected\s+)?[^.,!?\n]+?\s+into\s+(?:a\s+|an\s+|the\s+)?([^.,!?\n]+)",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if not m:
+            continue
+        label = clean_short_text(m.group(1), max_words=8)
+        label = re.sub(r"^(?:이|그|저|the|a|an)\s+", "", label, flags=re.IGNORECASE).strip()
+        if label:
+            return label
+    return ""
+
+
+def build_deterministic_edit_phrase(target_label: str, edit_request: str) -> tuple[str, str]:
+    replacement = extract_replacement_label(edit_request)
+    if replacement:
+        desired = translate_known_korean_phrase(replacement)
+        return f"replace the selected {target_label} with a {desired}", desired
+
+    normalized = translate_known_korean_phrase(edit_request)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized or f"edit the selected {target_label}", ""
+
+
+def prompt_preserves_required_edit(prompt: str, required_phrase: str) -> bool:
+    if not required_phrase:
+        return True
+    required_words = [w for w in re.findall(r"[A-Za-z0-9]+", required_phrase.lower()) if len(w) > 1]
+    prompt_words = set(re.findall(r"[A-Za-z0-9]+", prompt.lower()))
+    return all(word in prompt_words for word in required_words)
+
+
 def build_sd3_prompt_with_llava(image: Image.Image, target_label: str, edit_request: str) -> str:
-    fallback = clean_short_text(edit_request, max_words=28) or f"edit the selected {target_label}"
+    deterministic_phrase, required_phrase = build_deterministic_edit_phrase(target_label, edit_request)
+    fallback = deterministic_phrase
     try:
         question = (
             "Write one concise English Stable Diffusion inpainting prompt. "
             f"Masked object: {target_label}. User edit request: {edit_request}. "
+            f"The prompt must preserve this exact requested edit intent: {deterministic_phrase}. "
             "Describe the desired final appearance only. Do not mention masks or instructions."
         )
-        result = run_llava_vqa(image=image, question=question, max_new_tokens=96, temperature=0.2)
+        result = run_llava_vqa(image=image, question=question, max_new_tokens=96, temperature=0.1)
         candidate = clean_short_text(result.get("answer", ""), max_words=32)
-        if candidate:
+        if candidate and prompt_preserves_required_edit(candidate, required_phrase):
             fallback = candidate
     except Exception:
         pass

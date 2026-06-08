@@ -95,6 +95,27 @@ function addMessage(role, text) {
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
 
+function addThinkingMessage() {
+  const msg = document.createElement("div");
+  msg.className = "chat-msg assistant typing-indicator";
+  msg.setAttribute("role", "status");
+  msg.setAttribute("aria-label", "모델이 작업 중입니다");
+  msg.innerHTML = `
+    <span class="typing-dots" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
+  `;
+  els.chatMessages.appendChild(msg);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  return msg;
+}
+
+function removeThinkingMessage(msg) {
+  if (msg?.parentNode) msg.remove();
+}
+
 function setActiveView(view) {
   state.currentView = view;
   const map = {
@@ -173,16 +194,23 @@ async function submitMessage(message, options = {}) {
   els.approveBtn.disabled = true;
   setStatus("챗봇 처리 중...");
 
+  let thinkingMsg = null;
   try {
+    thinkingMsg = addThinkingMessage();
     const data = await postMessage(text);
+    removeThinkingMessage(thinkingMsg);
+    thinkingMsg = null;
     updateFromResponse(data);
   } catch (e) {
+    removeThinkingMessage(thinkingMsg);
+    thinkingMsg = null;
     if (e instanceof TypeError) {
       setStatus("실패: 네트워크 연결 오류입니다. API URL, 포트 오픈, CORS/HTTPS 설정을 확인하세요.");
     } else {
       setStatus(`실패: ${e}`);
     }
   } finally {
+    removeThinkingMessage(thinkingMsg);
     els.sendBtn.disabled = false;
     els.approveBtn.disabled = false;
   }

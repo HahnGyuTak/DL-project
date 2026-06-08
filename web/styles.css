@@ -581,6 +581,47 @@ button:disabled {
   border: 1px solid #dbe5ef;
 }
 
+.chat-msg.typing-indicator {
+  min-width: 54px;
+  padding: 12px 14px;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 16px;
+}
+
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #52718e;
+  opacity: 0.48;
+  animation: typing-wave 1.05s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@keyframes typing-wave {
+  0%, 70%, 100% {
+    opacity: 0.46;
+    transform: translateY(0) scale(0.92);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1.06);
+  }
+}
+
 .chat-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

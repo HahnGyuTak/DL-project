@@ -11,6 +11,8 @@ python demo.py
 
 실행 로그에 출력된 포트를 확인한 뒤 브라우저에서 `http://127.0.0.1:<port>`를 연다. 기본적으로 7860부터 비어 있는 포트를 자동 선택한다.
 
+UI를 열기 전에 EfficientSAM, Grounding DINO, Qwen2.5-VL, SD3 Inpaint를 모두 GPU에 preload한다. 따라서 첫 실행은 모델 로딩 때문에 시간이 걸리지만, UI가 열린 뒤에는 모델 로딩 대기 없이 작업을 시작할 수 있다.
+
 포트나 외부 접속 주소를 바꾸려면 다음 환경 변수를 사용한다.
 
 ```bash

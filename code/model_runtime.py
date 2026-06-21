@@ -391,6 +391,14 @@ class ModelRuntime:
         draw.text((x0 + 5, label_top + 2), text, fill=(0, 0, 0))
         return overlay
 
+    def preload_all(self) -> str:
+        """Load every model used by the chatbot before the Gradio UI opens."""
+        self.get_efficient_sam()
+        self.get_grounding_dino()
+        self.get_qwen_vl()
+        self.get_sd3_inpaint()
+        return self.model_status()
+
     def model_status(self) -> str:
         states = [
             ("EfficientSAM", self._sam_model, self._sam_device),

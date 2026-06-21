@@ -141,7 +141,7 @@ def create_demo(service: EditChatService | None = None) -> gr.Blocks:
                 max_side = gr.Slider(512, 1536, value=1024, step=64, label="Max input side")
 
         with gr.Row():
-            model_status = gr.Textbox(label="GPU Model Status", value="로드된 모델 없음", interactive=False)
+            model_status = gr.Textbox(label="GPU Model Status", value=service.runtime.model_status(), interactive=False)
             refresh_status = gr.Button("모델 상태 확인")
             unload_models = gr.Button("GPU 모델 Unload")
 

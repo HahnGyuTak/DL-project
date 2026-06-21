@@ -35,7 +35,7 @@ cd DL-project
 python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements_api.txt
+pip install -r requirements.txt
 ```
 
 #### `conda` 
@@ -44,7 +44,7 @@ pip install -r requirements_api.txt
 conda create -n dl-project python=3.10 -y
 conda activate dl-project
 pip install --upgrade pip
-pip install -r requirements_api.txt
+pip install -r requirements.txt
 ```
 
 ---

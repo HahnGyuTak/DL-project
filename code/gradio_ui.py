@@ -42,6 +42,7 @@ def create_demo(service: EditChatService | None = None) -> gr.Blocks:
         mask_expand: int,
         seed: int,
         max_side: int,
+        forced_action: str | None = None,
     ) -> Generator[tuple, None, None]:
         history = list(history or [])
         text = (message or "").strip()
@@ -65,7 +66,7 @@ def create_demo(service: EditChatService | None = None) -> gr.Blocks:
             max_side=int(max_side),
         )
         try:
-            update = service.process_message(session, text, settings)
+            update = service.process_message(session, text, settings, forced_action=forced_action)
             history[-1] = {"role": "assistant", "content": update.assistant_message}
             approve_visible = session.stage == "awaiting_approval"
             yield (
@@ -93,7 +94,7 @@ def create_demo(service: EditChatService | None = None) -> gr.Blocks:
         max_side: int,
     ) -> Generator[tuple, None, None]:
         yield from process_message(
-            "진행",
+            "수정 진행",
             session,
             history,
             view,
@@ -103,6 +104,7 @@ def create_demo(service: EditChatService | None = None) -> gr.Blocks:
             mask_expand,
             seed,
             max_side,
+            forced_action="approve",
         )
 
     with gr.Blocks(title="MLLM Image Edit Chatbot", css=CSS) as demo:

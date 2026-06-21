@@ -22,11 +22,12 @@ GRADIO_SERVER_NAME=0.0.0.0 GRADIO_SERVER_PORT=7860 python demo.py
 ## Chat Flow
 
 1. 이미지를 업로드한다.
-2. `강아지를 수정하고 싶어.`처럼 수정할 개체를 말한다.
-3. Grounding DINO와 EfficientSAM이 대상 mask 및 overlay를 만든다.
-4. 수정 요청을 입력하면 Qwen2.5-VL이 SD3용 inpainting prompt를 제안한다.
-5. `수정 진행` 버튼 또는 `진행` 메시지로 승인하면 SD3 Inpaint가 결과를 만든다.
-6. 추가 요청을 입력하면 현재 결과 이미지를 기준으로 같은 과정을 반복한다.
+2. `강아지`, `고양이를 수정하고 싶어.`처럼 수정할 개체를 말한다.
+3. Qwen2.5-VL이 대상 선택 요청을 검증 가능한 영어 `target_en` JSON으로 변환한다.
+4. Grounding DINO와 EfficientSAM이 검증된 `target_en`으로 대상 mask 및 overlay를 만든다.
+5. 수정 요청을 입력하면 Qwen2.5-VL이 요청된 변경만 담은 영어 edit intent를 만들고, 속성 및 색상 충돌을 검증한 SD3용 inpainting prompt를 제안한다.
+6. `수정 진행` 버튼 또는 승인 메시지로 승인하면 SD3 Inpaint가 결과를 만든다.
+7. 추가 요청을 입력하면 현재 결과 이미지를 기준으로 같은 과정을 반복한다.
 
 ## Model Sources
 

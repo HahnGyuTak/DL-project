@@ -107,7 +107,6 @@ def create_demo(service: EditChatService | None = None) -> gr.Blocks:
 
     with gr.Blocks(title="MLLM Image Edit Chatbot", css=CSS) as demo:
         gr.Markdown("# MLLM Image Edit Chatbot", elem_id="demo-title")
-        gr.Markdown("이미지 + 자연어 요청으로 `Grounding DINO → EfficientSAM → Qwen2.5-VL → SD3 Inpaint` 과정을 대화형으로 실행한다.")
 
         session_state = gr.State(value=None)
         with gr.Row(equal_height=False):

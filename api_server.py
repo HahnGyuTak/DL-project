@@ -496,6 +496,24 @@ def _center_crop_multiple_of_64(image: Image.Image) -> tuple[Image.Image, tuple[
     return image.crop((left, top, right, bottom)), (left, top, right, bottom)
 
 
+def expand_mask_for_inpaint(
+    mask: Image.Image,
+    mask_expand_px: int,
+    reference_side: int = 1024,
+) -> tuple[Image.Image, int]:
+    """Expand a binary mask using a radius expressed at the reference resolution."""
+    requested_px = int(mask_expand_px)
+    if requested_px <= 0:
+        return mask, 0
+
+    # Keep expansion visually stable: 12px means 12px on a 1024px model input.
+    scale = max(mask.size) / max(1, int(reference_side))
+    effective_px = max(1, int(round(requested_px * scale)))
+    effective_px = min(effective_px, 127)
+    kernel_size = effective_px * 2 + 1
+    return mask.filter(ImageFilter.MaxFilter(size=kernel_size)), effective_px
+
+
 @torch.no_grad()
 def run_sd3_inpaint(
     image: Image.Image,
@@ -513,20 +531,19 @@ def run_sd3_inpaint(
     image = image.convert("RGB")
     mask = mask.convert("L").point(lambda p: 255 if p > 127 else 0)
 
-    # Expand mask area a bit so inpainting also covers boundary/context around the object.
-    if int(mask_expand_px) > 0:
-        k = int(mask_expand_px) * 2 + 1
-        if k % 2 == 0:
-            k += 1
-        k = max(3, min(k, 255))
-        mask = mask.filter(ImageFilter.MaxFilter(size=k))
-
     if max(image.size) > int(max_side):
         image, mask, _ = _resize_for_inpaint(image, mask, max_side=max_side)
 
     original_size = image.size
     image_c, crop_box = _center_crop_multiple_of_64(image)
     mask_c, _ = _center_crop_multiple_of_64(mask)
+
+    # Expand after resize/crop, so mask_expand_px is defined at a 1024px model input.
+    mask_c, effective_mask_expand_px = expand_mask_for_inpaint(
+        mask_c,
+        mask_expand_px=mask_expand_px,
+        reference_side=1024,
+    )
 
     image_t = transforms.ToTensor()(image_c).unsqueeze(0).to(device=device, dtype=dtype)
     mask_t = transforms.ToTensor()(mask_c).to(device=device, dtype=dtype)
@@ -560,6 +577,7 @@ def run_sd3_inpaint(
         "device": str(device),
         "dtype": str(dtype).replace("torch.", ""),
         "model_id": SD3_INPAINT_MODEL_ID,
+        "mask_expand_px_at_input": effective_mask_expand_px,
     }
 
 

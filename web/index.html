@@ -3,93 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Model Dock - Segmentation</title>
-    <meta name="description" content="Model Dock from-scratch demos" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css" />
+    <meta http-equiv="refresh" content="0; url=./chatbot.html" />
+    <title>Model Dock - MLLM Edit Chatbot</title>
+    <script>
+      window.location.replace("./chatbot.html");
+    </script>
   </head>
   <body>
-    <main class="wrap">
-      <nav class="topnav">
-        <a class="active" href="./index.html">EfficientSAM Segmentation</a>
-        <a href="./detection.html">Grounding DINO Detection</a>
-        <a href="./vqa.html">Qwen2.5-VL VQA</a>
-        <a href="./seg_inpaint.html">Seg + SD3 Inpaint</a>
-        <a href="./chatbot.html">MLLM Edit Chatbot</a>
-      </nav>
-
-      <header class="hero">
-        <div class="hero-head">
-          <h1>EfficientSAM Segmentation</h1>
-          <p class="hero-meta">XAI506 DeepLearning Project
-2025011102 한규탁</p>
-        </div>
-      </header>
-
-      <section class="panel controls">
-        <div class="row api-row">
-          <label>
-            API URL
-            <input id="apiUrl" type="url" placeholder="https://your-api-server" />
-          </label>
-          <button id="saveApiBtn" class="small">저장</button>
-          <button id="healthBtn" class="ghost small">헬스체크</button>
-          <div id="modelControlPanel" class="model-control-panel" data-models="segmentation"></div>
-        </div>
-
-        <div class="row">
-          <label>
-            Prompt Mode
-            <select id="modeSelect">
-              <option value="point">point</option>
-              <option value="box">box</option>
-            </select>
-          </label>
-
-          <label>
-            Point Label
-            <select id="labelSelect">
-              <option value="1">foreground</option>
-              <option value="0">background</option>
-            </select>
-          </label>
-
-          <label>
-            Input Size
-            <input id="inputSize" type="number" value="1024" min="512" max="1536" step="64" />
-          </label>
-        </div>
-
-        <div class="row action-row">
-          <input id="imageInput" type="file" accept="image/*" />
-          <button id="undoBtn" class="ghost">Undo</button>
-          <button id="clearBtn" class="ghost">Clear</button>
-          <button id="runBtn">Run Segmentation</button>
-        </div>
-
-        <p id="status" class="status"></p>
-      </section>
-
-      <section class="panel stage">
-        <div class="col">
-          <h2>Input + Prompts</h2>
-          <canvas id="inputCanvas"></canvas>
-        </div>
-        <div class="col">
-          <h2>Result Overlay</h2>
-          <img id="resultImg" alt="segmentation result" src="data:image/gif;base64,R0lGODlhAgABAIABAP///wAAACwAAAAAAQABAAACAkQBADs=" />
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>Segmented Crops</h2>
-        <div id="segCropGrid" class="crop-grid"></div>
-      </section>
-    </main>
-
-    <script src="./app.js"></script>
-    <script src="./model_controls.js"></script>
+    <p>MLLM Edit Chatbot으로 이동 중입니다. <a href="./chatbot.html">계속하기</a></p>
   </body>
 </html>

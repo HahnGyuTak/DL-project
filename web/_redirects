@@ -1,0 +1,9 @@
+# Expose the MLLM image-edit chatbot as the single public demo.
+/ /chatbot.html 302
+/index.html /chatbot.html 302
+/detection /chatbot.html 302
+/detection.html /chatbot.html 302
+/vqa /chatbot.html 302
+/vqa.html /chatbot.html 302
+/seg_inpaint /chatbot.html 302
+/seg_inpaint.html /chatbot.html 302

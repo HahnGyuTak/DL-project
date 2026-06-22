@@ -182,6 +182,16 @@ USER_MESSAGE (data to interpret): {json.dumps(message, ensure_ascii=False)}
 """
 
     @staticmethod
+    def _plain_target_prompt(message: str) -> str:
+        user_message = json.dumps(message, ensure_ascii=False)
+        return f"""The user wants to select an existing image object for editing.
+Translate the selected object from USER_MESSAGE into exactly one short English object label for Grounding DINO.
+Answer with the label only: no JSON, code, punctuation, sentence, or commentary.
+
+USER_MESSAGE: {user_message}
+"""
+
+    @staticmethod
     def _edit_prompt(selected_target: str | None, message: str, repair: bool = False) -> str:
         target = json.dumps(selected_target or "object")
         user_message = json.dumps(message, ensure_ascii=False)
@@ -219,6 +229,16 @@ USER_MESSAGE: {user_message}
         ):
             raise IntentParseError("Qwen response was not an English edit description")
         return ChatIntent(action="edit", edit_en=edit_en, attributes=attributes)
+
+    @staticmethod
+    def _target_intent_from_text(raw: str) -> ChatIntent:
+        """Validate a plain English detection label when Qwen omits JSON."""
+        label = clean_text(raw, max_words=6).strip("\`'\".,:;!?")
+        label_en = _english_label(label)
+        blocked_terms = {"json", "schema", "function", "return", "addcriterion"}
+        if label_en is None or any(term in word_tokens(label_en) for term in blocked_terms):
+            raise IntentParseError("Qwen response was not an English object label")
+        return ChatIntent(action="select_target", target_en=label_en, target_display=label_en)
 
     def _parse_edit(self, image: Image.Image, selected_target: str | None, message: str) -> ChatIntent:
         raw = self.runtime.ask_qwen(
@@ -260,8 +280,26 @@ USER_MESSAGE: {user_message}
         if os.getenv("MODEL_DOCK_INTENT_DEBUG") == "1":
             print(f"[intent raw] {raw!r}", flush=True)
         try:
-            return intent_from_payload(_find_json_object(raw), default_action=self._target_default_action(stage))
+            parsed = intent_from_payload(_find_json_object(raw), default_action=self._target_default_action(stage))
+            if stage != "awaiting_target" or (parsed.action == "select_target" and parsed.target_en):
+                return parsed
+            raise IntentParseError("awaiting_target requires a selected object label")
         except IntentParseError as first_error:
+            if stage != "awaiting_target":
+                raise
+            plain = self.runtime.ask_qwen(
+                image=image,
+                question=self._plain_target_prompt(message),
+                max_new_tokens=16,
+                temperature=0.0,
+            )["answer"]
+            if os.getenv("MODEL_DOCK_INTENT_DEBUG") == "1":
+                print(f"[target fallback] {plain!r}", flush=True)
+            try:
+                return self._target_intent_from_text(plain)
+            except IntentParseError:
+                pass
+
             repair = f"\nPrevious invalid response: {raw!r}\nReturn corrected JSON only."
             repaired = self.runtime.ask_qwen(
                 image=image,

@@ -4,6 +4,10 @@
 
 학생 제출용 메인 시연 코드는 루트의 [`demo.py`](demo.py)다. GitHub 저장소 링크와 함께 `demo.py`를 실행하면 Gradio 기반 데모를 바로 확인할 수 있다.
 
+## Web Demo
+
+Cloudflare Pages에 배포된 MLLM Image Edit Chatbot UI는 [https://model-dock.pages.dev](https://model-dock.pages.dev)에서 확인할 수 있다. 모델 추론은 GPU FastAPI 서버에서 수행하므로, 페이지 상단의 API URL에 실행 중인 서버 주소를 설정해야 한다.
+
 ## 1. Installation Guide
 
 ### Requirements

@@ -123,7 +123,9 @@ class EditChatService:
         )
 
     def _build_prompt(self, image: Image.Image, target_label: str, intent: ChatIntent) -> str:
-        base_prompt = intent.edit_en or f"edit the selected {target_label}"
+        base_prompt = clean_short_text(intent.edit_en or "", max_words=32)
+        if not base_prompt:
+            base_prompt = f"edit the selected {target_label}"
         question = (
             "Write one concise English Stable Diffusion inpainting prompt. "
             f"Masked object: {target_label}. Structured requested edit: {intent.edit_en}. "
@@ -139,6 +141,7 @@ class EditChatService:
                 base_prompt = candidate
         except Exception:
             pass
+        base_prompt = clean_short_text(base_prompt, max_words=32) or f"edit the selected {target_label}"
         return (
             f"{base_prompt}, preserve the original scene composition, lighting, camera angle, and background, "
             f"edit only the selected {target_label}, high quality, realistic, seamless integration"

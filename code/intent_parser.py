@@ -15,6 +15,40 @@ from .model_runtime import ModelRuntime
 VALID_ACTIONS = {"select_target", "edit", "approve", "cancel", "unknown"}
 COLOR_WORDS = {"red", "blue", "yellow", "black", "white", "green", "orange", "purple", "brown", "gray"}
 INVALID_TARGET_LABELS = {"no", "none", "unknown", "null", "nothing", "n/a", "not found"}
+APPROVAL_MESSAGES = {
+    "응",
+    "네",
+    "예",
+    "좋아",
+    "좋아요",
+    "진행",
+    "진행해",
+    "진행해주세요",
+    "진행할게",
+    "진행할께",
+    "승인",
+    "승인해",
+    "수정 진행",
+    "수정 진행해",
+    "proceed",
+    "go ahead",
+    "yes",
+    "y",
+    "ok",
+    "okay",
+}
+CANCEL_MESSAGES = {
+    "아니",
+    "아니요",
+    "취소",
+    "취소해",
+    "취소해주세요",
+    "진행하지마",
+    "진행하지 마",
+    "no",
+    "n",
+    "cancel",
+}
 
 
 class IntentParseError(ValueError):
@@ -37,6 +71,16 @@ def clean_text(value: Any, max_words: int = 32) -> str:
         return ""
     text = " ".join(value.strip().split())
     return " ".join(text.split()[:max_words]).strip()
+
+
+def approval_action(message: str) -> str | None:
+    """Handle explicit confirmation text before asking the MLLM to classify it."""
+    normalized = " ".join((message or "").strip().lower().split())
+    if normalized in APPROVAL_MESSAGES:
+        return "approve"
+    if normalized in CANCEL_MESSAGES:
+        return "cancel"
+    return None
 
 
 def word_tokens(value: str) -> set[str]:
@@ -300,6 +344,11 @@ USER_MESSAGE: {user_message}
                 ) from second_error
 
     def parse(self, image: Image.Image, stage: str, message: str, selected_target: str | None = None) -> ChatIntent:
+        if stage == "awaiting_approval":
+            action = approval_action(message)
+            if action is not None:
+                return ChatIntent(action=action)
+
         if stage in {"awaiting_edit", "completed"}:
             return self._parse_edit(image, selected_target, message)
 

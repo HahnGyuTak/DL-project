@@ -1,35 +1,36 @@
-# XAI506 DeepLearning Project
+# MLLM Image Edit
 
-- EfficientSAM 세그멘테이션
-- Grounding DINO Open-vocabulary Detection
-- LLaVA VQA
-- Segmentation + SD3 Inpainting
+이미지와 자연어 요청으로 특정 객체를 찾고, mask 기반으로 수정하는 대화형 이미지 편집 프로젝트다.
 
-> [Web Demo](https://model-dock.pages.dev/)
+학생 제출용 메인 시연 코드는 루트의 [`demo.py`](demo.py)다. GitHub 저장소 링크와 함께 `demo.py`를 실행하면 Gradio 기반 데모를 바로 확인할 수 있다.
 
-> [Web Demo Guidelines](docs/README_WEB_DEMO.md)
-
----
-
-## 1. Set Up
+## 1. Installation Guide
 
 ### Requirements
 
-- Python 3.10+ , `pip`
-- NVIDIA GPU + CUDA
-> (선택) Cloudflare Pages 배포 시 `node`, `npm`, `wrangler`
+- Python 3.10 이상
+- NVIDIA GPU 및 CUDA 지원 PyTorch 환경 권장
+- 충분한 GPU 메모리와 Hugging Face 모델 캐시 저장 공간
+- `git`
 
+SD3 base model은 Hugging Face 모델 카드에서 접근 승인이 필요할 수 있다. 처음 실행 전에 해당 모델 접근 권한을 승인하고 Hugging Face에 로그인한다.
 
-### Git clone
+```bash
+hf auth login
+```
+
+### Clone Repository
 
 ```bash
 git clone https://github.com/HahnGyuTak/DL-project.git
 cd DL-project
 ```
 
-### Python Environment
+### Create Python Environment
 
-#### `venv` 
+`venv` 또는 `conda` 중 하나를 사용한다.
+
+#### venv
 
 ```bash
 python -m venv .venv
@@ -38,77 +39,72 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### `conda` 
+#### conda
 
 ```bash
-conda create -n dl-project python=3.10 -y
-conda activate dl-project
+conda create -n mllm-image-edit python=3.10 -y
+conda activate mllm-image-edit
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
----
+### Run Main Demonstration
 
-## 2. Explanation & I/O
-
-**Input image**
-
-![Example](img/xai506_example_image.jpg)
-
-
-### 2.1 Efficient SAM 
-
-[code](ipynb/efficientsam_segmentation.ipynb)
-
-**Model:** `merve/EfficientSAM`
-
-EfficientSAM은 SAM 계열의 경량 segmentation 모델이다. 노트북에서는 입력 이미지 `img/xai506_example_image.jpg`를 불러온 뒤, point prompt 또는 box prompt를 모델 입력에 맞게 resize한다. 
-point prompt는 foreground/background label을 사용하고, box prompt는 두 꼭짓점 좌표로 영역을 지정한다.
-
-**Output:** 선택된 mask의 IoU 후보 중 가장 높은 mask를 선택하고, 원본 이미지 위에 segmentation 영역을 overlay한 결과를 출력한다.
-
-![SAM output](img/output_sam.webp)
-
-
-### 2.2 Open vocab detection
-
-[code](ipynb/grounding_dino_open_vocab_detection.ipynb)
-
-**Model:** `IDEA-Research/grounding-dino-tiny`
-
-Grounding DINO는 사용자가 지정한 텍스트 label을 기반으로 객체를 검출하는 open-vocabulary detection 모델이다. 노트북에서는 `candidate_labels`를 `person`, `table`, `cup`처럼 자유롭게 지정하고, label을 소문자 + 마침표 형태의 text prompt로 변환한 뒤 이미지와 함께 모델에 입력한다.
-
-**Output:** 텍스트 조건과 맞는 객체의 bounding box, confidence score, label을 계산하고, 원본 이미지 위에 박스와 label을 그려서 시각화한다.
-
-`candidate_labels = ['person']`
-
-![DINO output](img/output_dino.png)
-
-`candidate_labels = ['table', 'cup']`
-
-![DINO output](img/output_dino2.png)
-
-
-### 2.3 LLava VQA
-
-[code](ipynb/llava_vqa_xai506_example.ipynb)
-
-**Model:** `llava-hf/llava-1.5-7b-hf`
-
-LLaVA는 이미지와 텍스트 질문을 함께 입력받아 답변을 생성하는 vision-language 모델이다. 
-이미지 tensor와 질문 token을 함께 모델에 넣어 답변을 생성한다.
-
-**Output:** 질문에 대한 자연어 답변을 출력한다. GPU 환경에서는 `float16`으로 로드해 추론한다.
-
-`question = 'What is happening in this image? Please answer in Korean.'`
-
-
+```bash
+python demo.py
 ```
-Model: llava-hf/llava-1.5-7b-hf
-Device: cuda
-DType: float16
---- Question ---
-What is happening in this image? Please answer in Korean.
---- Answer ---
-이 이미지에서는 학생들이 학교에서 수업을 듣고 있는 모습을 볼 수 있습니다. 학생들은 컴퓨터와 라피를 사용하며, 책과 커피잔을 볼 수 있습니다. 이 모습은 학생들이 집중하고 있는 학습 환경을 보여줍니다.
+
+시작 시 EfficientSAM, Grounding DINO, Qwen2.5-VL, SD3 Inpaint를 GPU에 preload한다. 모델 다운로드와 로딩이 끝나면 터미널에 Gradio 주소가 출력된다.
+
+```text
+* Running on local URL: http://0.0.0.0:7860
 ```
+
+로컬 브라우저에서는 `http://127.0.0.1:7860`을 연다. 원격 서버에서는 서버 IP와 포트를 사용한다.
+
+포트를 고정하거나 외부 접속을 허용하려면 다음과 같이 실행한다.
+
+```bash
+GRADIO_SERVER_NAME=0.0.0.0 GRADIO_SERVER_PORT=7860 python demo.py
+```
+
+## 2. MLLM Image Edit
+
+### Purpose
+
+사용자는 이미지를 업로드한 뒤 자연어로 수정할 객체와 수정 내용을 대화한다. 예를 들어 `강아지를 수정하고 싶어`라고 입력해 대상을 선택하고, `고양이로 수정해줘`라고 입력해 변경 내용을 제안받은 뒤 승인하면 결과 이미지를 생성한다.
+
+### Pipeline
+
+1. **Qwen2.5-VL**이 사용자의 한국어 요청을 객체 라벨과 영어 편집 의도로 해석한다.
+2. **Grounding DINO**가 텍스트 라벨에 맞는 객체 bounding box를 찾는다.
+3. **EfficientSAM**이 bounding box를 입력받아 정밀 segmentation mask를 생성한다.
+4. **Qwen2.5-VL**이 수정 요청을 SD3용 영어 inpainting prompt로 정리한다. 요청한 객체와 색상 등이 누락되거나 충돌하는 후보 프롬프트는 사용하지 않는다.
+5. **Stable Diffusion 3 Inpaint**가 원본 이미지, 확장된 mask, 승인된 prompt를 입력받아 mask 내부만 수정한다.
+
+mask는 SD3 경계가 자연스럽게 이어지도록 1024px 기준 12px까지 확장한다. 수정 결과가 생성된 뒤에도 같은 대화 세션에서 추가 편집을 반복할 수 있다.
+
+### Input and Output
+
+| Stage | Input | Output |
+| --- | --- | --- |
+| Target selection | Image + `강아지를 수정하고 싶어` | Detection box, segmentation overlay, mask |
+| Edit proposal | `고양이로 수정해줘` | SD3 inpainting prompt + approval request |
+| Image generation | `수정 진행` 버튼 | Edited image with the selected mask region changed |
+
+### Main Code Structure
+
+- [`demo.py`](demo.py): 메인 Gradio demonstration entry point
+- [`code/gradio_ui.py`](code/gradio_ui.py): 이미지 업로드, 채팅, 승인 버튼 UI
+- [`code/edit_chat.py`](code/edit_chat.py): 공통 대화 상태머신과 SD3 prompt 생성
+- [`code/intent_parser.py`](code/intent_parser.py): Qwen 응답에서 대상·편집 의도 추출
+- [`code/model_runtime.py`](code/model_runtime.py): EfficientSAM, Grounding DINO, Qwen2.5-VL, SD3 모델 로드 및 추론
+
+### Models
+
+- Segmentation: [`merve/EfficientSAM`](https://huggingface.co/merve/EfficientSAM)
+- Open-vocabulary detection: [`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny)
+- MLLM: local `Qwen2.5-VL-7B-Instruct` checkpoint if available, otherwise [`Qwen/Qwen2.5-VL-7B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct)
+- Image editing: [`IrohXu/stable-diffusion-3-inpainting`](https://huggingface.co/IrohXu/stable-diffusion-3-inpainting) pipeline with [`stabilityai/stable-diffusion-3-medium-diffusers`](https://huggingface.co/stabilityai/stable-diffusion-3-medium-diffusers)
+
+`QWEN_VL_MODEL_ID` 환경 변수로 Qwen 모델 경로나 Hugging Face model ID를 지정할 수 있다.

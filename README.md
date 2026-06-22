@@ -6,7 +6,9 @@
 
 ## Web Demo
 
-Cloudflare Pages에 배포된 MLLM Image Edit Chatbot UI는 [https://model-dock.pages.dev](https://model-dock.pages.dev)에서 확인할 수 있다. 모델 추론은 GPU FastAPI 서버에서 수행하므로, 페이지 상단의 API URL에 실행 중인 서버 주소를 설정해야 한다.
+Cloudflare Pages에 배포된 MLLM Image Edit Chatbot UI는 [https://model-dock.pages.dev](https://model-dock.pages.dev)에서 확인할 수 있다. 모델 추론은 GPU FastAPI 서버에서 수행한다.
+
+페이지 상단 API URL에 `https://dvd-scales-approval-alcohol.trycloudflare.com`를 입력한 뒤 저장하고 Health Check를 누르면 연결 상태가 표시된다. 이 주소를 입력했는데도 연결되지 않으면 FastAPI 서버 또는 Cloudflare Tunnel이 꺼져 있는 상태다.
 
 ## 1. Installation Guide
 

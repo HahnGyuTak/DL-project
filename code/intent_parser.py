@@ -220,20 +220,30 @@ USER_MESSAGE: {user_message}
 
     @staticmethod
     def _tool_call_text(raw: str) -> str:
-        """Extract a quoted tool-call argument emitted by some Qwen generations."""
-        if "<tool_call>" not in raw or ":" not in raw:
+        """Extract the last JSON string from Qwen tool-call style generations."""
+        lower_raw = raw.lower()
+        if "<tool_call>" not in raw and "addcriterion" not in lower_raw:
             return raw
-        candidate = raw.rsplit(":", 1)[1].strip()
-        try:
-            decoded = json.loads(candidate)
-        except json.JSONDecodeError:
-            return raw
-        return decoded if isinstance(decoded, str) else raw
+
+        decoder = json.JSONDecoder()
+        strings: list[str] = []
+        for index, char in enumerate(raw):
+            if char != '"':
+                continue
+            try:
+                decoded, _ = decoder.raw_decode(raw[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(decoded, str) and decoded.strip():
+                strings.append(decoded)
+        return strings[-1] if strings else raw
 
     @staticmethod
     def _edit_intent_from_text(raw: str) -> ChatIntent:
         """Accept either a JSON edit field or a clean English description from Qwen."""
         decoded_raw = QwenIntentParser._tool_call_text(raw)
+        if "<tool_call>" in decoded_raw:
+            raise IntentParseError("Qwen tool call did not contain an edit string")
         try:
             payload = _find_json_object(decoded_raw)
             edit_en = clean_text(payload.get("edit_en", payload.get("edit")), max_words=36)

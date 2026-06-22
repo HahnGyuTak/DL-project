@@ -133,10 +133,8 @@ class EditChatService:
             "Describe the desired final appearance only. Do not mention masks or instructions."
         )
         try:
-            candidate = clean_short_text(
-                self.runtime.ask_qwen(image, question, max_new_tokens=96, temperature=0.1)["answer"],
-                max_words=32,
-            )
+            raw_candidate = self.runtime.ask_qwen(image, question, max_new_tokens=96, temperature=0.1)["answer"]
+            candidate = clean_short_text(QwenIntentParser._tool_call_text(raw_candidate), max_words=32)
             if candidate and prompt_preserves_intent(candidate, intent, target_label):
                 base_prompt = candidate
         except Exception:

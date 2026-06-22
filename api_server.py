@@ -19,6 +19,7 @@ from qwen_vl_utils import process_vision_info
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, Qwen2_5_VLForConditionalGeneration
 from torchvision import transforms
 from torchvision.transforms import ToTensor
+from code.edit_chat import EditChatService, EditChatSession, EditSettings
 
 REPO_ID = "merve/EfficientSAM"
 GROUNDING_DINO_MODEL_ID = "IDEA-Research/grounding-dino-tiny"
@@ -534,7 +535,6 @@ def run_sd3_inpaint(
     if max(image.size) > int(max_side):
         image, mask, _ = _resize_for_inpaint(image, mask, max_side=max_side)
 
-    original_size = image.size
     image_c, crop_box = _center_crop_multiple_of_64(image)
     mask_c, _ = _center_crop_multiple_of_64(mask)
 
@@ -972,6 +972,123 @@ def propose_chat_edit(session: dict[str, Any], message: str) -> dict[str, Any]:
     session["history"].append({"role": "assistant", "content": session["assistant_message"]})
     return session
 
+
+class ApiChatRuntime:
+    """Adapter exposing the FastAPI model functions to the shared chat state machine."""
+
+    def detect(self, image: Image.Image, text_prompt: str, threshold: float, text_threshold: float) -> dict[str, Any]:
+        return run_open_vocab_detection(image, text_prompt, threshold=threshold, text_threshold=text_threshold)
+
+    def segment_from_box(self, image: Image.Image, box_xyxy: list[float], input_size: int = 1024) -> dict[str, Any]:
+        x0, y0, x1, y1 = box_xyxy
+        result = run_inference(
+            image,
+            [[int(round(x0)), int(round(y0))], [int(round(x1)), int(round(y1))]],
+            [2, 3],
+            input_size=input_size,
+        )
+        return {
+            "mask": Image.fromarray(result["mask"].astype(np.uint8) * 255, mode="L"),
+            "best_idx": result["best_idx"],
+            "ious": result["ious"],
+            "device": result["device"],
+            "checkpoint": result["checkpoint"],
+        }
+
+    def ask_qwen(
+        self,
+        image: Image.Image,
+        question: str,
+        max_new_tokens: int = 96,
+        temperature: float = 0.1,
+    ) -> dict[str, Any]:
+        return run_llava_vqa(
+            image=image,
+            question=question,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+
+    def inpaint(
+        self,
+        image: Image.Image,
+        mask: Image.Image,
+        prompt: str,
+        negative_prompt: str = "blurry, low quality, artifacts, distorted",
+        steps: int = 30,
+        guidance_scale: float = 7.0,
+        strength: float = 0.6,
+        mask_expand_px: int = 12,
+        seed: int = -1,
+        max_side: int = 1024,
+    ) -> dict[str, Any]:
+        return run_sd3_inpaint(
+            image=image,
+            mask=mask,
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=steps,
+            guidance_scale=guidance_scale,
+            strength=strength,
+            mask_expand_px=mask_expand_px,
+            seed=seed,
+            max_side=max_side,
+        )
+
+    @staticmethod
+    def make_mask_overlay(image: Image.Image, mask: Image.Image, alpha: float = 0.45) -> Image.Image:
+        return make_overlay(image, np.array(mask.convert("L")) > 127, alpha=alpha)
+
+    @staticmethod
+    def make_chat_overlay(
+        image: Image.Image,
+        mask: Image.Image,
+        detection: dict[str, Any],
+        target_label: str,
+    ) -> Image.Image:
+        return make_chat_segmentation_overlay(
+            image,
+            np.array(mask.convert("L")) > 127,
+            detection,
+            target_label,
+        )
+
+
+_SHARED_CHAT_SERVICE = EditChatService(runtime=ApiChatRuntime())
+_SHARED_CHAT_SESSIONS: dict[str, EditChatSession] = {}
+
+
+def _store_shared_chat_session(session_id: str, session: EditChatSession) -> None:
+    with _CHAT_LOCK:
+        _SHARED_CHAT_SESSIONS[session_id] = session
+
+
+def _get_shared_chat_session(session_id: str) -> EditChatSession:
+    with _CHAT_LOCK:
+        session = _SHARED_CHAT_SESSIONS.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="chat session not found")
+    return session
+
+
+def _shared_chat_response(session_id: str, session: EditChatSession, update: Any) -> dict[str, Any]:
+    response: dict[str, Any] = {
+        "ok": True,
+        "session_id": session_id,
+        "stage": session.stage,
+        "target_label": session.target_label or None,
+        "detection_label": session.detection_label or None,
+        "assistant_message": update.assistant_message,
+        "proposed_prompt": session.proposed_prompt,
+    }
+    if session.overlay is not None:
+        response["overlay_png_b64"] = encode_png(session.overlay)
+    if session.mask is not None:
+        response["mask_png_b64"] = encode_png(session.mask)
+    if session.stage == "completed":
+        response["output_png_b64"] = encode_png(session.current_image)
+    return response
+
 app = FastAPI(title="EfficientSAM API", version="1.0.0")
 
 app.add_middleware(
@@ -1056,30 +1173,25 @@ async def create_chat_edit_session(
 
     try:
         pil = Image.open(io.BytesIO(content)).convert("RGB")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to decode image: {e}") from e
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=f"Failed to decode image: {error}") from error
 
-    session = create_unsegmented_chat_session(
-        image=pil,
-        message=message,
-        assistant_message="수정할 개체를 찾는 중입니다.",
-        stage="segmenting",
-    )
-    session = segment_chat_session(session, message)
-    store_chat_session(session)
-
-    extra: dict[str, Any] = {}
-    if session.get("overlay") is not None:
-        extra["overlay_png_b64"] = encode_png(session["overlay"])
-    if session.get("mask") is not None:
-        extra["mask_png_b64"] = encode_png(session["mask"])
-    return public_chat_response(session, **extra)
+    session_id = uuid.uuid4().hex
+    session = _SHARED_CHAT_SERVICE.new_session(pil)
+    settings = EditSettings()
+    try:
+        update = _SHARED_CHAT_SERVICE.process_message(session, message, settings)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Chat target selection failed: {error}") from error
+    _store_shared_chat_session(session_id, session)
+    return _shared_chat_response(session_id, session, update)
 
 
 @app.post("/chat/edit/sessions/{session_id}/messages")
 async def chat_edit_message(
     session_id: str,
     message: str = Form(...),
+    forced_action: str = Form(""),
     num_inference_steps: int = Form(30),
     guidance_scale: float = Form(7.0),
     strength: float = Form(0.6),
@@ -1087,78 +1199,26 @@ async def chat_edit_message(
     seed: int = Form(-1),
     max_side: int = Form(1024),
 ) -> dict[str, Any]:
-    if not message.strip():
+    if not message.strip() and not forced_action.strip():
         raise HTTPException(status_code=400, detail="message is required")
 
-    session = get_chat_session(session_id)
-    stage = session.get("stage")
-
-    if stage in {"awaiting_target", "segmenting"}:
-        session = segment_chat_session(session, message)
-        store_chat_session(session)
-        extra: dict[str, Any] = {}
-        if session.get("overlay") is not None:
-            extra["overlay_png_b64"] = encode_png(session["overlay"])
-        if session.get("mask") is not None:
-            extra["mask_png_b64"] = encode_png(session["mask"])
-        return public_chat_response(session, **extra)
-
-    if stage == "awaiting_approval" and is_approval_message(message):
-        if session.get("mask") is None or not session.get("proposed_prompt"):
-            session["stage"] = "awaiting_edit"
-            session["assistant_message"] = "진행할 수정 프롬프트가 없어요. 수정 내용을 다시 알려주세요."
-            store_chat_session(session)
-            return public_chat_response(session)
-        try:
-            result = run_sd3_inpaint(
-                image=session["current_image"],
-                mask=session["mask"],
-                prompt=session["proposed_prompt"],
-                negative_prompt="blurry, low quality, artifacts, distorted",
-                num_inference_steps=int(num_inference_steps),
-                guidance_scale=float(guidance_scale),
-                strength=float(strength),
-                mask_expand_px=int(mask_expand_px),
-                seed=int(seed),
-                max_side=int(max_side),
-            )
-        except Exception as e:
-            session["assistant_message"] = f"SD3 수정에 실패했어요. 같은 프롬프트로 다시 진행하거나 수정 요청을 바꿔주세요: {e}"
-            store_chat_session(session)
-            return public_chat_response(session)
-
-        output = result["image"].convert("RGB")
-        session["current_image"] = output
-        if session.get("mask") is not None and session["mask"].size != output.size:
-            session["mask"] = session["mask"].resize(output.size, resample=Image.NEAREST)
-        session["stage"] = "completed"
-        session["assistant_message"] = "수정 이미지를 생성했어요. 추가로 바꾸고 싶은 점이 있으면 이어서 말해주세요."
-        session["history"].append({"role": "user", "content": message})
-        session["history"].append({"role": "assistant", "content": session["assistant_message"]})
-        store_chat_session(session)
-        return public_chat_response(
-            session,
-            output_png_b64=encode_png(output),
-            device=result["device"],
-            dtype=result["dtype"],
-            model_id=result["model_id"],
-        )
-
-    if stage == "awaiting_approval" and is_cancel_message(message):
-        session["stage"] = "awaiting_edit"
-        session["assistant_message"] = "좋아요. 수정 방향을 다시 알려주세요."
-        store_chat_session(session)
-        return public_chat_response(session)
-
-    if session.get("mask") is None:
-        session["stage"] = "awaiting_target"
-        session["assistant_message"] = "먼저 수정할 개체를 알려주세요. 예: '강아지를 수정하고 싶어.'"
-        store_chat_session(session)
-        return public_chat_response(session)
-
-    session = propose_chat_edit(session, message)
-    store_chat_session(session)
-    return public_chat_response(session)
+    session = _get_shared_chat_session(session_id)
+    settings = EditSettings(
+        steps=int(num_inference_steps),
+        guidance_scale=float(guidance_scale),
+        strength=float(strength),
+        mask_expand_px=int(mask_expand_px),
+        seed=int(seed),
+        max_side=int(max_side),
+    )
+    action = forced_action.strip().lower()
+    action = action if action in {"approve", "cancel"} else None
+    try:
+        update = _SHARED_CHAT_SERVICE.process_message(session, message, settings, forced_action=action)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Chat edit failed: {error}") from error
+    _store_shared_chat_session(session_id, session)
+    return _shared_chat_response(session_id, session, update)
 
 
 @app.post("/segment")

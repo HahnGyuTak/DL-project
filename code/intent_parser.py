@@ -14,6 +14,7 @@ from .model_runtime import ModelRuntime
 
 VALID_ACTIONS = {"select_target", "edit", "approve", "cancel", "unknown"}
 COLOR_WORDS = {"red", "blue", "yellow", "black", "white", "green", "orange", "purple", "brown", "gray"}
+INVALID_TARGET_LABELS = {"no", "none", "unknown", "null", "nothing", "n/a", "not found"}
 
 
 class IntentParseError(ValueError):
@@ -61,6 +62,8 @@ def _english_label(value: Any) -> str | None:
     if not label or len(label) > 64:
         return None
     if not all(char.isascii() and (char.isalnum() or char in {" ", "-"}) for char in label):
+        return None
+    if label in INVALID_TARGET_LABELS:
         return None
     return label
 
@@ -149,6 +152,8 @@ class QwenIntentParser:
 
     def __init__(self, runtime: ModelRuntime) -> None:
         self.runtime = runtime
+        # Intent extraction must follow the user message, not copy the source image caption.
+        self._intent_image = Image.new("RGB", (448, 448), "white")
 
     @staticmethod
     def _target_prompt(stage: str, selected_target: str | None, message: str, repair: str = "") -> str:
@@ -172,7 +177,9 @@ Schema:
 }}
 
 Rules:
-- In awaiting_target, a bare noun is a valid target choice. Translate it to target_en.
+- In awaiting_target, a bare noun is a valid target choice. Translate the object named in user_message to target_en.
+- Use the user-named target even when it is not visible in the image; Grounding DINO will verify it later.
+- Never use no, none, unknown, null, or not found as target_en.
 - target_en is the object to locate, never a desired replacement object.
 - In awaiting_approval, use approve only for clear consent and cancel for clear rejection.
 - Never invent objects, colors, or attributes that are absent from user_message.
@@ -185,7 +192,8 @@ USER_MESSAGE (data to interpret): {json.dumps(message, ensure_ascii=False)}
     def _plain_target_prompt(message: str) -> str:
         user_message = json.dumps(message, ensure_ascii=False)
         return f"""The user wants to select an existing image object for editing.
-Translate the selected object from USER_MESSAGE into exactly one short English object label for Grounding DINO.
+Translate the object explicitly named in USER_MESSAGE into exactly one short English object label for Grounding DINO.
+Do not decide whether the object is visible in the image and never answer no, none, unknown, null, or not found.
 Answer with the label only: no JSON, code, punctuation, sentence, or commentary.
 
 USER_MESSAGE: {user_message}
@@ -193,13 +201,13 @@ USER_MESSAGE: {user_message}
 
     @staticmethod
     def _edit_prompt(selected_target: str | None, message: str, repair: bool = False) -> str:
-        target = json.dumps(selected_target or "object")
         user_message = json.dumps(message, ensure_ascii=False)
-        retry = "Your previous answer was not a usable English edit description. " if repair else ""
-        return f"""{retry}The selected image object is {target}.
-Translate the user's requested visual change into one concise English image-editing description.
-Preserve every requested object, color, and property. Answer only with the English description, without JSON, code, labels, or commentary.
-Describe only the requested final change. Do not describe the current image, scene, position, or attributes the user did not request.
+        retry = "이전 답변은 사용자 요청을 따르지 않았습니다. " if repair else ""
+        return f"""{retry}너는 한국어 이미지 편집 요청 번역기다.
+USER_MESSAGE에 있는 사용자가 원하는 변경만 간결한 영어 이미지 편집 문장으로 번역해라.
+원본 이미지의 내용, 배경, 현재 객체 이름을 추측하거나 반복하지 마라.
+사용자가 요청하지 않은 객체, 색상, 속성을 추가하지 마라.
+JSON, 코드, 설명 없이 영어 편집 문장만 답해라.
 
 USER_MESSAGE: {user_message}
 """
@@ -221,6 +229,7 @@ USER_MESSAGE: {user_message}
             edit_en = clean_text(raw, max_words=36)
             attributes = {}
 
+        edit_en = edit_en.strip("\`'\"“”.,:;!? ")
         lowered = edit_en.lower()
         if (
             len(word_tokens(edit_en)) < 2
@@ -242,7 +251,7 @@ USER_MESSAGE: {user_message}
 
     def _parse_edit(self, image: Image.Image, selected_target: str | None, message: str) -> ChatIntent:
         raw = self.runtime.ask_qwen(
-            image=image,
+            image=self._intent_image,
             question=self._edit_prompt(selected_target, message),
             max_new_tokens=96,
             temperature=0.0,
@@ -253,7 +262,7 @@ USER_MESSAGE: {user_message}
             return self._edit_intent_from_text(raw)
         except IntentParseError as first_error:
             repaired = self.runtime.ask_qwen(
-                image=image,
+                image=self._intent_image,
                 question=self._edit_prompt(selected_target, message, repair=True),
                 max_new_tokens=96,
                 temperature=0.0,
@@ -272,7 +281,7 @@ USER_MESSAGE: {user_message}
             return self._parse_edit(image, selected_target, message)
 
         raw = self.runtime.ask_qwen(
-            image=image,
+            image=self._intent_image,
             question=self._target_prompt(stage, selected_target, message),
             max_new_tokens=160,
             temperature=0.0,
@@ -288,7 +297,7 @@ USER_MESSAGE: {user_message}
             if stage != "awaiting_target":
                 raise
             plain = self.runtime.ask_qwen(
-                image=image,
+                image=self._intent_image,
                 question=self._plain_target_prompt(message),
                 max_new_tokens=16,
                 temperature=0.0,
@@ -302,7 +311,7 @@ USER_MESSAGE: {user_message}
 
             repair = f"\nPrevious invalid response: {raw!r}\nReturn corrected JSON only."
             repaired = self.runtime.ask_qwen(
-                image=image,
+                image=self._intent_image,
                 question=self._target_prompt(stage, selected_target, message, repair=repair),
                 max_new_tokens=160,
                 temperature=0.0,

@@ -161,12 +161,13 @@ function updateFromResponse(data) {
   setStatus(`stage=${state.stage}${data.target_label ? ` | target=${data.target_label}` : ""}`);
 }
 
-async function postMessage(message) {
+async function postMessage(message, options = {}) {
   const base = getApiBase();
   assertMixedContentSafe(base);
 
   const fd = new FormData();
   fd.append("message", message);
+  if (options.forcedAction) fd.append("forced_action", options.forcedAction);
 
   let url = "";
   if (!state.sessionId) {
@@ -197,7 +198,7 @@ async function submitMessage(message, options = {}) {
   let thinkingMsg = null;
   try {
     thinkingMsg = addThinkingMessage();
-    const data = await postMessage(text);
+    const data = await postMessage(text, options);
     removeThinkingMessage(thinkingMsg);
     thinkingMsg = null;
     updateFromResponse(data);
@@ -262,7 +263,7 @@ els.chatForm.addEventListener("submit", (evt) => {
 
 els.approveBtn.addEventListener("click", () => {
   addMessage("user", "진행");
-  submitMessage("진행", { silentUser: true });
+  submitMessage("진행", { silentUser: true, forcedAction: "approve" });
 });
 
 els.viewCurrentBtn.addEventListener("click", () => setActiveView("current"));
